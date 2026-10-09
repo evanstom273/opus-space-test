@@ -587,7 +587,7 @@ export function buildPatch(gen, face, x0, y0, size, skirtDepth) {
 
 const _b = { h: 0, nx: 0, ny: 0, nz: 0, slope: 0, m: 0 };
 
-export function buildScatter(gen, tier, face, level, x0, y0, size, wantSpawns) {
+export function buildScatter(gen, tier, face, level, x0, y0, size, wantSpawns, density = 1) {
   const rules = gen.scatter.filter((r) => r.tier === tier);
   const R = gen.R;
   // approximate cell area in m^2
@@ -599,7 +599,7 @@ export function buildScatter(gen, tier, face, level, x0, y0, size, wantSpawns) {
   for (let ri = 0; ri < rules.length; ri++) {
     const rule = rules[ri];
     const rand = mulberry32(seedBase ^ hash32(ri * 977 + 13));
-    const count = Math.round(rule.density * areaHa);
+    const count = Math.round(rule.density * areaHa * density);
     const data = [];
     for (let c = 0; c < count; c++) {
       const a = x0 + rand() * size, bb = y0 + rand() * size;

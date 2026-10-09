@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../core/noise.js';
 import { ATMO_PARS, NOISE_GLSL } from '../render/shaders.js';
+import { Q } from '../core/quality.js';
 
 const STAR_R = 900000;
 
@@ -108,8 +109,13 @@ export class Sky {
           // tilted galactic band
           float band = d.y * 0.88 - d.z * 0.47;
           float bandMask = exp(-band * band * 18.0);
-          float n = snoise(d * 2.2) * 0.5 + snoise(d * 5.1) * 0.3 + snoise(d * 11.0) * 0.2;
-          float n2 = snoise(d * 3.3 + 7.0);
+          #ifdef LOW_Q
+            float n = snoise(d * 2.6);
+            float n2 = sin(d.x * 3.0 + d.z * 2.0) * 0.5;
+          #else
+            float n = snoise(d * 2.2) * 0.5 + snoise(d * 5.1) * 0.3 + snoise(d * 11.0) * 0.2;
+            float n2 = snoise(d * 3.3 + 7.0);
+          #endif
           vec3 c1 = vec3(0.10, 0.05, 0.20);
           vec3 c2 = vec3(0.02, 0.09, 0.16);
           vec3 c3 = vec3(0.20, 0.07, 0.10);
@@ -117,13 +123,18 @@ export class Sky {
           col = mix(col, c3, smoothstep(0.3, 0.8, n) * 0.6);
           float neb = smoothstep(-0.2, 0.7, n) * (0.25 + bandMask * 0.9);
           vec3 outc = col * neb * 0.55 + vec3(0.006, 0.007, 0.012);
-          float dust = smoothstep(0.1, 0.6, snoise(d * 7.0 + 3.0)) * bandMask;
+          #ifdef LOW_Q
+            float dust = 0.0;
+          #else
+            float dust = smoothstep(0.1, 0.6, snoise(d * 7.0 + 3.0)) * bandMask;
+          #endif
           outc *= 1.0 - dust * 0.6;
           gl_FragColor = vec4(outc, 1.0);
         }
       `,
       side: THREE.BackSide,
       depthWrite: false,
+      defines: Q.name === 'low' ? { LOW_Q: '' } : {},
     });
     this.nebula = new THREE.Mesh(geo, this.nebulaMat);
     this.nebula.frustumCulled = false;

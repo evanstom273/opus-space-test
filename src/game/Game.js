@@ -136,6 +136,7 @@ export class Game {
       this.last = now;
       this.fps += (1 / Math.max(raw, 1e-3) - this.fps) * 0.05;
       const dt = this.fixedDt || Math.min(0.05, raw);
+      this.pipeline.adaptResolution(raw);
       try {
         this.frame(dt);
       } catch (err) {

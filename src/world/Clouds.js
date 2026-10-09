@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { part, mergeParts, mat, jitter, G } from '../render/geom.js';
 import { createCloudMaterial } from '../render/materials.js';
 import { mulberry32 } from '../core/noise.js';
+import { Q } from '../core/quality.js';
 
 function cloudGeo(seed) {
   const rand = mulberry32(seed);
@@ -13,7 +14,7 @@ function cloudGeo(seed) {
     const r = 0.35 + rand() * 0.45;
     const x = (rand() - 0.5) * 2.4, z = (rand() - 0.5) * 1.3;
     const y = r * 0.35 + rand() * 0.15;
-    const g = jitter(G.ico(r, 2), 0.06, seed + i, 3);
+    const g = jitter(G.ico(r, Q.cloudDetail), 0.06, seed + i, 3);
     parts.push(part(g, 0xffffff, { matrix: mat([x, y, z], [0, 0, 0], [1, 0.72, 1]) }));
   }
   // flat base

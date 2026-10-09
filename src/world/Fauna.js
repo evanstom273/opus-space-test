@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { SPECIES, buildSpeciesProto, instantiate, animateCreature } from './creatures.js';
 import { createCelMaterial, createOutlineMaterial } from '../render/materials.js';
 import { mulberry32 } from '../core/noise.js';
+import { Q } from '../core/quality.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -26,7 +27,7 @@ export class Fauna {
     this.protos = new Map();
     this.herds = new Map();
     this.creatures = [];
-    this.max = (('ontouchstart' in window) || navigator.maxTouchPoints > 0) ? 22 : 38;
+    this.max = Q.fauna;
     this.calls = [];
     this.playerLocal = new THREE.Vector3();
     for (const p of universe.planets) {

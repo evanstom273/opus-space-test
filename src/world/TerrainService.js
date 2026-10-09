@@ -75,7 +75,7 @@ export class TerrainService {
   _runLocal(job) {
     const gen = this.gens[job.planet];
     if (job.kind === 'patch') return buildPatch(gen, job.face, job.x0, job.y0, job.size, job.skirt);
-    return buildScatter(gen, job.tier, job.face, job.level, job.x0, job.y0, job.size, job.spawns);
+    return buildScatter(gen, job.tier, job.face, job.level, job.x0, job.y0, job.size, job.spawns, job.density);
   }
 
   _onResult(worker, msg) {

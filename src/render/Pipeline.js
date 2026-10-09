@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { Q } from '../core/quality.js';
 
 const GradeShader = {
   uniforms: {
@@ -49,11 +50,12 @@ export class Pipeline {
     });
     const params = new URLSearchParams(location.search);
     this.lowres = params.has('lowres');
-    this.mobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-    this.pixelRatio = this.lowres ? 0.5 : this.mobile ? Math.min(window.devicePixelRatio || 1, 1.0) : Math.min(window.devicePixelRatio || 1, 1.5);
+    this.maxPixelRatio = this.lowres ? 0.5 : Math.min(window.devicePixelRatio || 1, Q.pixelRatioMax);
+    this.pixelRatio = this.maxPixelRatio;
+    this.adapt = { t: 0, frames: 0, time: 0, cooldown: 4, enabled: !params.has('fixeddt') };
     renderer.setPixelRatio(this.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = Q.shadows;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
@@ -67,8 +69,8 @@ export class Pipeline {
 
     // Sun shadow light; direction is updated each frame from the sun to the focus.
     const light = new THREE.DirectionalLight(0xffffff, 0.0);
-    light.castShadow = true;
-    light.shadow.mapSize.set(this.mobile ? 1024 : 2048, this.mobile ? 1024 : 2048);
+    light.castShadow = Q.shadows;
+    light.shadow.mapSize.set(Q.shadowSize, Q.shadowSize);
     light.shadow.bias = -0.0004;
     light.shadow.normalBias = 0.04;
     light.shadow.radius = 1.5;
@@ -82,18 +84,45 @@ export class Pipeline {
     const size = new THREE.Vector2(window.innerWidth, window.innerHeight);
     const rt = new THREE.WebGLRenderTarget(size.x * this.pixelRatio, size.y * this.pixelRatio, {
       type: THREE.HalfFloatType,
-      samples: this.lowres || this.mobile ? 0 : 4,
+      samples: this.lowres ? 0 : Q.msaa,
     });
     this.composer = new EffectComposer(renderer, rt);
     this.composer.setPixelRatio(this.pixelRatio);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(size, 0.42, 0.55, 2.6);
-    this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GradeShader);
-    this.composer.addPass(this.grade);
+    if (Q.bloom) {
+      this.bloom = new UnrealBloomPass(size, 0.42, 0.55, 2.6);
+      this.composer.addPass(this.bloom);
+      this.composer.addPass(this.grade);
+    }
     this.composer.addPass(new OutputPass());
 
     window.addEventListener('resize', () => this.resize());
+  }
+
+  // Adaptive resolution: drop the render scale when the frame rate sags,
+  // raise it again when there is headroom.
+  adaptResolution(rawDt) {
+    const a = this.adapt;
+    if (!a.enabled) return;
+    a.frames++;
+    a.time += rawDt;
+    a.cooldown -= rawDt;
+    if (a.time < 2) return;
+    const fps = a.frames / a.time;
+    a.frames = 0;
+    a.time = 0;
+    if (a.cooldown > 0) return;
+    let pr = this.pixelRatio;
+    if (fps < 42) pr = Math.max(Q.pixelRatioMin, pr * (fps < 28 ? 0.75 : 0.87));
+    else if (fps > 57) pr = Math.min(this.maxPixelRatio, pr * 1.1);
+    if (Math.abs(pr - this.pixelRatio) > 0.01) {
+      this.pixelRatio = pr;
+      this.renderer.setPixelRatio(pr);
+      this.composer.setPixelRatio(pr);
+      this.resize();
+      a.cooldown = 3;
+    }
   }
 
   resize() {

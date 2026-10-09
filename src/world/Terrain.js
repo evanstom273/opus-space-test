@@ -3,9 +3,9 @@
 import * as THREE from 'three';
 import { PATCH_N, faceToDir } from './terrainGen.js';
 import { nodeEdge, lodLevels } from './planetDefs.js';
+import { Q } from '../core/quality.js';
 
-const MOBILE = typeof window !== 'undefined' && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
-const SPLIT_K = MOBILE ? 1.6 : 1.9;
+const SPLIT_K = Q.splitK;
 const MERGE_K = 2.4;
 
 let sharedIndex = null;
@@ -23,7 +23,15 @@ function getIndices() {
       else { idx.push(a, b, c, b, d, c); }
     }
   }
-  const water = idx.slice();
+  // water uses a coarser grid on low quality (it is flat, so this is cheap)
+  const ws = Q.waterStride || 1;
+  const water = [];
+  for (let j = 0; j < N - 1; j += ws) {
+    for (let i = 0; i < N - 1; i += ws) {
+      const a = j * N + i, b = a + ws, c = a + ws * N, d = c + ws;
+      water.push(a, b, d, a, d, c);
+    }
+  }
   // skirts: edges are stored after the grid as [bottom, top, left, right]
   const base = N * N;
   const edgeLists = [];
@@ -90,7 +98,7 @@ export class Terrain {
     const minH = planet.def.hasSea ? Math.max(planet.def.minHeight ?? -60, planet.def.seaLevel - 2) : (planet.def.minHeight ?? -60);
     this.occluderR = this.R + minH - 5;
     const lv = lodLevels(this.R);
-    this.maxLevel = lv.maxLevel;
+    this.maxLevel = lv.maxLevel + (Q.levelOffset || 0);
     this.scatterLevel = lv.scatterLevel;
     this.grassLevel = lv.grassLevel;
     this.group = new THREE.Group();
@@ -173,7 +181,7 @@ export class Terrain {
     if (!this.onScatter) return;
     const tier = node.level === this.scatterLevel ? 0 : 1;
     node.scatterJob = this.service.request(
-      { kind: 'scatter', planet: this.index, tier, face: node.face, level: node.level, x0: node.x0, y0: node.y0, size: node.size, spawns: tier === 0 },
+      { kind: 'scatter', planet: this.index, tier, face: node.face, level: node.level, x0: node.x0, y0: node.y0, size: node.size, spawns: tier === 0, density: Q.floraDensity },
       this._priority(node) - 0.3,
       (res) => {
         node.scatterJob = null;
@@ -206,7 +214,7 @@ export class Terrain {
     ];
     for (const c of node.children) {
       this._request(c);
-      if (this.scatterEnabled && (c.level === this.scatterLevel || (c.level === this.grassLevel && !MOBILE))) this._requestScatter(c);
+      if (this.scatterEnabled && (c.level === this.scatterLevel || (c.level === this.grassLevel && Q.grass))) this._requestScatter(c);
     }
   }
 

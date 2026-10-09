@@ -3,6 +3,7 @@
 // sky ambient and per-vertex atmospheric scattering for aerial perspective.
 import * as THREE from 'three';
 import { ATMO_PARS, CEL_FUNCS, SHADOW_FRAG, NOISE_GLSL } from './shaders.js';
+import { Q } from '../core/quality.js';
 
 export function createEnv() {
   return {
@@ -94,7 +95,7 @@ void main() {
   vAmb = ambientAt(worldPosition.xyz, vNormalW);
   vec3 toV = worldPosition.xyz - cameraPosition;
   float dist = length(toV);
-  atmoScatter(cameraPosition, toV / max(dist, 1e-4), dist, 6, vInscatter, vTransmit);
+  atmoScatter(cameraPosition, toV / max(dist, 1e-4), dist, ${Q.vertexAtmoSteps}, vInscatter, vTransmit);
 }
 `;
 
@@ -234,7 +235,7 @@ void main() {
   wp = modelMatrix * wp;
   vec3 toV = wp.xyz - cameraPosition;
   float d = length(toV);
-  atmoScatter(cameraPosition, toV / max(d, 1e-4), d, 4, vInscatter, vTransmit);
+  atmoScatter(cameraPosition, toV / max(d, 1e-4), d, ${Q.outlineAtmoSteps}, vInscatter, vTransmit);
 }
 `;
 
@@ -307,7 +308,7 @@ void main() {
   vAmb = ambientAt(worldPosition.xyz, vUp);
   vec3 toV = worldPosition.xyz - cameraPosition;
   float dist = length(toV);
-  atmoScatter(cameraPosition, toV / max(dist, 1e-4), dist, 6, vInscatter, vTransmit);
+  atmoScatter(cameraPosition, toV / max(dist, 1e-4), dist, ${Q.vertexAtmoSteps}, vInscatter, vTransmit);
 }
 `;
 
@@ -350,7 +351,11 @@ void main() {
     float t = uTime * 0.6;
     vec3 q = lp * 0.18;
     float n1 = snoise(q + vec3(t, 0.0, t * 0.7));
-    float n2 = snoise(q * 2.3 - vec3(t * 0.8, t * 0.5, 0.0));
+    #ifdef LOW_Q
+      float n2 = n1 * 0.6;
+    #else
+      float n2 = snoise(q * 2.3 - vec3(t * 0.8, t * 0.5, 0.0));
+    #endif
     vec3 tA = normalize(cross(vUp, vec3(0.0, 1.0, 0.0001)));
     vec3 tB = cross(vUp, tA);
     vec3 N = normalize(vUp + (tA * n1 + tB * n2) * 0.12 * fd);
@@ -363,7 +368,11 @@ void main() {
     vec3 H = normalize(L + V);
     float sp = pow(max(dot(N, H), 0.0), 220.0);
     col += vSunCol * smoothstep(0.3, 0.5, sp) * 2.0 * sh;
-    float foamN = snoise(lp * 0.35 + vec3(0.0, uTime * 0.4, 0.0));
+    #ifdef LOW_Q
+      float foamN = sin(dot(lp, vec3(0.3, 0.2, 0.25)) + uTime * 0.8) * 0.6;
+    #else
+      float foamN = snoise(lp * 0.35 + vec3(0.0, uTime * 0.4, 0.0));
+    #endif
     float foam = smoothstep(1.4, 0.4, vDepth + foamN * 0.5) * (1.0 - smoothstep(0.0, 0.2, -vDepth));
     col = mix(col, uFoam * (vAmb + vSunCol * 0.9), foam * 0.85);
     alpha = mix(0.55, 0.95, depthT) + foam * 0.3 + fres * 0.2;
@@ -416,6 +425,7 @@ export function createWaterMaterial(env, def) {
   });
   return new THREE.ShaderMaterial({
     uniforms,
+    defines: Q.name === 'low' ? { LOW_Q: '' } : {},
     vertexShader: WATER_VERT,
     fragmentShader: WATER_FRAG,
     lights: true,
@@ -453,7 +463,7 @@ void main() {
   vec2 tg = raySphere(ro, rd, uPlanetCenter, uGroundRadius);
   if (tg.x > 0.0) tMax = min(tMax, tg.x);
   vec3 ins, tr;
-  atmoScatter(ro, rd, tMax, 12, ins, tr);
+  atmoScatter(ro, rd, tMax, ${Q.skyAtmoSteps}, ins, tr);
   // bright sky hides what lies behind it (stars, distant planets)
   float a = max(1.0 - dot(tr, vec3(0.3333)), smoothstep(0.0, 0.12, dot(ins, vec3(0.3, 0.5, 0.2))));
   // dithering to break up banding

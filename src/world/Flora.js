@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { buildProp, FLORA_INFO } from './props.js';
 import { createCelMaterial, createOutlineMaterial } from '../render/materials.js';
 import { mulberry32 } from '../core/noise.js';
+import { Q } from '../core/quality.js';
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -15,7 +16,7 @@ const _s = new THREE.Vector3();
 const _c = new THREE.Color();
 const Y = new THREE.Vector3(0, 1, 0);
 
-const OUTLINE_R = 260;
+const OUTLINE_R = Q.outlineRadius;
 const SHADOW_R = 95;
 const _hidden = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 
