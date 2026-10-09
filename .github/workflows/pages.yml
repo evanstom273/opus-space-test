@@ -25,9 +25,14 @@ jobs:
       - uses: actions/configure-pages@v5
       - name: Assemble static site
         run: |
-          mkdir -p _site
-          cp -r index.html style.css src vendor _site/
+          V="b${GITHUB_SHA::8}"
+          mkdir -p "_site/$V"
+          cp -r vendor _site/
+          cp -r src "_site/$V/"
+          cp style.css "_site/$V/style.css"
+          sed -e "s#\./src/main.js#./$V/src/main.js#" -e "s#\./style.css#./$V/style.css#" index.html > _site/index.html
           touch _site/.nojekyll
+          grep -n "$V" _site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
