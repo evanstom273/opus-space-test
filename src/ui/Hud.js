@@ -93,10 +93,17 @@ export class Hud {
     container.innerHTML = html;
   }
 
+  setTouch(on) {
+    this.touch = on;
+    this.root.classList.add('is-touch');
+    this.startClick.textContent = 'Tap to begin · landscape recommended';
+  }
+
   setLocked(locked) {
     this.locked = locked;
     this.start.classList.toggle('hidden', locked);
     if (locked) this.start.classList.add('played');
+    if (this.touch) return;
     this.startClick.textContent = this.start.classList.contains('played') ? 'Paused · click to resume' : 'Click to begin';
   }
 

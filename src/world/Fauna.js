@@ -26,7 +26,7 @@ export class Fauna {
     this.protos = new Map();
     this.herds = new Map();
     this.creatures = [];
-    this.max = 38;
+    this.max = (('ontouchstart' in window) || navigator.maxTouchPoints > 0) ? 22 : 38;
     this.calls = [];
     this.playerLocal = new THREE.Vector3();
     for (const p of universe.planets) {

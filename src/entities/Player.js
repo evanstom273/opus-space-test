@@ -89,17 +89,22 @@ export class Player {
       fIn = input.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
       rIn = input.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
       sprint = input.down('ShiftLeft', 'ShiftRight');
+      if (input.stickActive && (input.stickX || input.stickY)) {
+        fIn = -input.stickY;
+        rIn = input.stickX;
+      }
       jumpHit = input.hit('Space');
       jumpHeld = input.down('Space');
     }
     const move = this._move.copy(this.camFwd).multiplyScalar(fIn).addScaledVector(camRight, rIn);
     const moving = move.lengthSq() > 0.01;
+    const analog = Math.min(1, move.length());
     if (moving) move.normalize();
 
     const g = planet.gravity;
     let vN = vel.dot(up);
     const vT = _c.copy(vel).addScaledVector(up, -vN);
-    const maxSpeed = this.swimming ? 2.6 : sprint ? 9.5 : 4.6;
+    const maxSpeed = (this.swimming ? 2.6 : sprint ? 9.5 : 4.6) * (moving ? Math.max(0.35, analog) : 1);
     const target = this._target.copy(move).multiplyScalar(moving ? maxSpeed : 0);
     const accel = this.grounded ? 12 : this.swimming ? 4 : 2.2;
     vT.lerp(target, 1 - Math.exp(-accel * dt));

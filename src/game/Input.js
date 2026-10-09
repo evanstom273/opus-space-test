@@ -10,6 +10,12 @@ export class Input {
     this.buttons = 0;
     this.locked = false;
     this.onLockChange = null;
+    this.touchMode = false;
+    this.touchStarted = false;
+    this.stickActive = false;
+    this.stickX = 0;
+    this.stickY = 0;
+    this.touchLooking = false;
 
     window.addEventListener('keydown', (e) => {
       if (e.repeat) { if (this._block(e)) e.preventDefault(); return; }
