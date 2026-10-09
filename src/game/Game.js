@@ -16,6 +16,7 @@ import { Weather } from '../world/Weather.js';
 import { Hud } from '../ui/Hud.js';
 import { AudioEngine } from '../audio/AudioEngine.js';
 import { Discoveries } from './Discoveries.js';
+import { TouchControls, isTouchDevice } from '../ui/TouchControls.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -76,6 +77,10 @@ export class Game {
       this.audio.resume();
     });
     this.input.onLockChange = (locked) => this.hud.setLocked(locked);
+    if (isTouchDevice()) {
+      this.touch = new TouchControls(hudEl, this.input, this);
+      this.hud.setTouch(true);
+    }
   }
 
   // Find a pleasant daytime landing spot and set the ship + player there.
@@ -154,21 +159,23 @@ export class Game {
     for (const p of u.planets) p.updateRotation(u.time);
 
     const tPre = performance.now();
-    const controls = input.locked || this.params.has('autopilot');
+    const controls = input.locked || this.params.has('autopilot') || (input.touchMode && input.touchStarted);
+    if (this.touch) this.touch.update();
+    const T = input.touchMode;
     if (this.mode === 'foot') {
       this._gatherColliders();
       this.player.update(dt, input, controls);
       this.ship.update(dt, null);
       const near = this._nearShip();
       if (near && controls && input.hit('KeyF')) this._board();
-      this.hud.prompt(near ? '[F] Board ship' : this.player.onLava ? 'Too hot! The crust burns' : '');
+      this.hud.prompt(near ? (T ? 'Tap BOARD to enter your ship' : '[F] Board ship') : this.player.onLava ? 'Too hot! The crust burns' : '');
     } else {
       this.ship.update(dt, controls ? input : null);
       if (this.ship.landed) {
-        this.hud.prompt('[F] Exit ship   ·   [Space] / [W] Take off');
+        this.hud.prompt(T ? 'EXIT to walk · UP or THRUST to take off' : '[F] Exit ship   ·   [Space] / [W] Take off');
         if (controls && input.hit('KeyF')) this._exitShip();
       } else {
-        this.hud.prompt(this.ship.gear > 0.5 && this.ship.altitude < 40 ? 'Landing gear down · descend gently to land' : '');
+        this.hud.prompt(this.ship.gear > 0.5 && this.ship.altitude < 40 ? (T ? 'Gear down · hold DOWN to land' : 'Landing gear down · hold [C] to settle and land') : '');
       }
     }
     this._placeEntities();
@@ -352,7 +359,7 @@ export class Game {
       if (!sc.init) { sc.lag.copy(shipQuat); sc.init = true; }
       sc.lag.slerp(shipQuat, 1 - Math.exp(-dt * (this.ship.landed ? 3 : 5.5)));
       // free-look orbit while holding the right mouse button
-      const free = (this.input.buttons & 4) !== 0 || this.input.down('AltLeft');
+      const free = (this.input.buttons & 4) !== 0 || this.input.down('AltLeft') || this.input.touchLooking;
       if (free) {
         sc.look.x -= this.input.mouseDX * 0.004;
         sc.look.y = THREE.MathUtils.clamp(sc.look.y - this.input.mouseDY * 0.004, -1.2, 1.2);

@@ -49,7 +49,8 @@ export class Pipeline {
     });
     const params = new URLSearchParams(location.search);
     this.lowres = params.has('lowres');
-    this.pixelRatio = this.lowres ? 0.5 : Math.min(window.devicePixelRatio || 1, 1.5);
+    this.mobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    this.pixelRatio = this.lowres ? 0.5 : this.mobile ? Math.min(window.devicePixelRatio || 1, 1.0) : Math.min(window.devicePixelRatio || 1, 1.5);
     renderer.setPixelRatio(this.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
@@ -67,7 +68,7 @@ export class Pipeline {
     // Sun shadow light; direction is updated each frame from the sun to the focus.
     const light = new THREE.DirectionalLight(0xffffff, 0.0);
     light.castShadow = true;
-    light.shadow.mapSize.set(2048, 2048);
+    light.shadow.mapSize.set(this.mobile ? 1024 : 2048, this.mobile ? 1024 : 2048);
     light.shadow.bias = -0.0004;
     light.shadow.normalBias = 0.04;
     light.shadow.radius = 1.5;
@@ -81,7 +82,7 @@ export class Pipeline {
     const size = new THREE.Vector2(window.innerWidth, window.innerHeight);
     const rt = new THREE.WebGLRenderTarget(size.x * this.pixelRatio, size.y * this.pixelRatio, {
       type: THREE.HalfFloatType,
-      samples: this.lowres ? 0 : 4,
+      samples: this.lowres || this.mobile ? 0 : 4,
     });
     this.composer = new EffectComposer(renderer, rt);
     this.composer.setPixelRatio(this.pixelRatio);

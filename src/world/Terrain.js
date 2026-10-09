@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { PATCH_N, faceToDir } from './terrainGen.js';
 import { nodeEdge, lodLevels } from './planetDefs.js';
 
-const SPLIT_K = 1.9;
+const MOBILE = typeof window !== 'undefined' && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+const SPLIT_K = MOBILE ? 1.6 : 1.9;
 const MERGE_K = 2.4;
 
 let sharedIndex = null;
@@ -205,7 +206,7 @@ export class Terrain {
     ];
     for (const c of node.children) {
       this._request(c);
-      if (this.scatterEnabled && (c.level === this.scatterLevel || c.level === this.grassLevel)) this._requestScatter(c);
+      if (this.scatterEnabled && (c.level === this.scatterLevel || (c.level === this.grassLevel && !MOBILE))) this._requestScatter(c);
     }
   }
 

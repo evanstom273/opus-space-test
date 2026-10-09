@@ -104,8 +104,11 @@ export class Ship {
       pitchKey = input.axis(['ArrowUp'], ['ArrowDown']);
       boostIn = input.down('ShiftLeft', 'ShiftRight');
       // virtual stick from mouse with auto-centering
-      this.stick.x += input.mouseDX * 0.0042;
-      this.stick.y += input.mouseDY * 0.0042;
+      if (input.stickActive) this.stick.set(input.stickX, input.stickY);
+      else if (!input.touchLooking) {
+        this.stick.x += input.mouseDX * 0.0042;
+        this.stick.y += input.mouseDY * 0.0042;
+      }
     }
     const center = Math.exp(-dt * 3.2);
     this.stick.multiplyScalar(center);

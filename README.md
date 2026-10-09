@@ -46,3 +46,13 @@ In space, hold `Shift` with `W` for the cruise drive. It slows automatically as 
   and single-scattering atmospheres (sky shell plus per-vertex aerial perspective).
 - Procedural rigged characters and creatures: one skinned mesh each, with procedural gaits.
 - Flora and rocks are placed deterministically per terrain cell and drawn as instanced batches.
+
+## Mobile
+
+On touch devices an on-screen layout appears (landscape recommended):
+- **Left side:** a floating joystick. On foot it moves you; in the ship it steers.
+- **Right side:** swipe to look around.
+- **Buttons on foot:** JUMP (hold for jetpack), RUN, and BOARD when you're next to the ship.
+- **Buttons in the ship:** THRUST, BRAKE, UP, DOWN, BOOST, roll, and EXIT once landed.
+
+Graphics settings are reduced automatically on mobile.
