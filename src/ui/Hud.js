@@ -156,12 +156,19 @@ export class Hud {
     this.errorEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
   }
 
+  // Only touch the DOM when a value actually changes.
+  _txt(el, v) { if (el._v !== v) { el._v = v; el.textContent = v; } }
+  _html(el, v) { if (el._h !== v) { el._h = v; el.innerHTML = v; } }
+
   update(dt) {
     const g = this.game;
     const u = g.universe;
+    this._textT = (this._textT || 0) - dt;
+    const doText = this._textT <= 0;
+    if (doText) this._textT = 0.12;
     // loading progress on the start screen
     const pending = u.service.pending;
-    this.startLoad.style.width = `${Math.max(5, 100 - Math.min(100, pending))}%`;
+    if (doText) this.startLoad.style.width = `${Math.max(5, 100 - Math.min(100, pending))}%`;
 
     const shipMode = g.mode === 'ship';
     const body = shipMode ? g.ship.body : g.player.body;
@@ -171,21 +178,21 @@ export class Hud {
     const inAtmo = planet && body.pos.length() < planet.atmoTop;
 
     // status
-    if (planet && (inAtmo || !shipMode)) {
-      this.statusName.textContent = planet.name;
+    if (!doText) { /* text refreshed at ~8 Hz */ } else if (planet && (inAtmo || !shipMode)) {
+      this._txt(this.statusName, planet.name);
       const alt = shipMode ? g.ship.altitude : 0;
-      this.statusSub.textContent = shipMode ? `Altitude ${fmtDist(Math.max(0, alt))} · ${Math.round(g.ship.speed)} m/s` : `${planet.def.blurb}`;
+      this._txt(this.statusSub, shipMode ? `Altitude ${fmtDist(Math.max(0, alt))} · ${Math.round(g.ship.speed)} m/s` : `${planet.def.blurb}`);
     } else if (planet) {
-      this.statusName.textContent = `${planet.name} orbit`;
-      this.statusSub.textContent = `Altitude ${fmtDist(near.altitude)} · ${Math.round(g.ship.speed)} m/s`;
+      this._txt(this.statusName, `${planet.name} orbit`);
+      this._txt(this.statusSub, `Altitude ${fmtDist(near.altitude)} · ${Math.round(g.ship.speed)} m/s`);
     } else {
-      this.statusName.textContent = 'Interplanetary space';
-      this.statusSub.textContent = `Nearest: ${near.planet.name} · ${fmtDist(near.altitude)}`;
+      this._txt(this.statusName, 'Interplanetary space');
+      this._txt(this.statusSub, `Nearest: ${near.planet.name} · ${fmtDist(near.altitude)}`);
     }
-    this.statusSub2.textContent = shipMode ? (g.ship.landed ? 'Landed' : g.ship.cruise ? 'Cruise drive engaged' : inAtmo ? 'Atmospheric flight' : 'Vacuum flight') : g.player.swimming ? 'Swimming' : g.player.jetting ? 'Jetpack' : 'On foot';
+    if (doText) this._txt(this.statusSub2, shipMode ? (g.ship.landed ? 'Landed' : g.ship.cruise ? 'Cruise drive engaged' : inAtmo ? 'Atmospheric flight' : 'Vacuum flight') : g.player.swimming ? 'Swimming' : g.player.jetting ? 'Jetpack' : 'On foot');
 
     // clock: sun elevation at the player's position
-    if (planet) {
+    if (!doText) { /* throttled */ } else if (planet) {
       const up = _w.copy(body.pos).normalize().applyQuaternion(planet.quat);
       const sunDir = u.sunWorld.clone().sub(world).normalize();
       const e = up.dot(sunDir);
@@ -193,20 +200,20 @@ export class Hud {
       const rising = new THREE.Vector3().crossVectors(ax, up).dot(sunDir) < 0;
       let label = e > 0.55 ? 'Midday' : e > 0.15 ? (rising ? 'Morning' : 'Afternoon') : e > -0.08 ? (rising ? 'Dawn' : 'Dusk') : 'Night';
       const disc = [...g.discoveries.planets.values()].reduce((a, d) => a + d.items.size, 0);
-      this.clock.innerHTML = `<span class="sun ${label.toLowerCase()}"></span>${label}${g.timeScale > 1 ? ' ⏩' : ''}<span class="sep">·</span>${disc} discoveries`;
+      this._html(this.clock, `<span class="sun ${label.toLowerCase()}"></span>${label}${g.timeScale > 1 ? ' ⏩' : ''}<span class="sep">·</span>${disc} discoveries`);
     } else {
       const disc = [...g.discoveries.planets.values()].reduce((a, d) => a + d.items.size, 0);
-      this.clock.innerHTML = `${disc} discoveries`;
+      this._html(this.clock, `${disc} discoveries`);
     }
 
     // ship gauges + reticle
     this.gauges.classList.toggle('show', shipMode);
     this.reticle.classList.toggle('show', shipMode && !g.ship.landed);
     this.fuel.classList.toggle('show', !shipMode && g.player.jetFuel < 0.999);
-    if (!shipMode) this.fuelFill.style.height = `${g.player.jetFuel * 100}%`;
+    if (!shipMode && doText) this.fuelFill.style.height = `${Math.round(g.player.jetFuel * 100)}%`;
     if (shipMode) {
       const s = g.ship;
-      this.gSpeed.innerHTML = `${Math.round(s.speed)}<span>m/s</span>`;
+      if (doText) this._html(this.gSpeed, `${Math.round(s.speed)}<span>m/s</span>`);
       const maxv = s.cruise ? 5200 : s.inAtmo ? 340 : 420;
       this.gFill.style.width = `${Math.min(100, (s.speed / maxv) * 100)}%`;
       this.gFill.classList.toggle('cruise', s.cruise);
@@ -215,7 +222,7 @@ export class Hud {
       if (s.boost > 0.3 && !s.cruise) flags.push('<b>BOOST</b>');
       flags.push(s.gear > 0.5 ? '<b class="f-gear">GEAR ▼</b>' : '<span>GEAR ▲</span>');
       if (s.heat > 0.1) flags.push('<b class="f-heat">ENTRY HEAT</b>');
-      this.gFlags.innerHTML = flags.join('');
+      this._html(this.gFlags, flags.join(''));
       const w = window.innerWidth, h = window.innerHeight;
       this.retStick.style.transform = `translate(${s.stick.x * 90}px, ${s.stick.y * 90}px)`;
       // prograde marker
@@ -267,8 +274,9 @@ export class Hud {
       }
       m.classList.toggle('off', off);
       m.style.transform = `translate(${(x * 0.5 + 0.5) * w}px, ${(-y * 0.5 + 0.5) * h}px)`;
-      m.querySelector('b').textContent = t.name;
-      m.querySelector('span').textContent = fmtDist(t.dist);
+      if (!m._b) { m._b = m.querySelector('b'); m._s = m.querySelector('span'); }
+      this._txt(m._b, t.name);
+      if (this._textT === 0.12) this._txt(m._s, fmtDist(t.dist));
     }
     for (const [k, m] of this.markerEls) {
       m.style.display = seen.has(k) ? '' : 'none';
