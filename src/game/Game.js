@@ -78,23 +78,25 @@ export class Game {
     this.input.onLockChange = (locked) => this.hud.setLocked(locked);
   }
 
-  // Find a pleasant daytime landing spot on Elysia and set the ship + player there.
+  // Find a pleasant daytime landing spot and set the ship + player there.
   _spawn() {
-    const planet = this.universe.planets[0];
-    const t = this.universe.time;
-    planet.updateRotation(t);
+    this._spawnOn(this.universe.planets[0]);
+  }
+
+  _spawnOn(planet) {
+    planet.updateRotation(this.universe.time);
     // sun direction in planet-local space, rotated back toward "morning"
     const sunLocal = planet.worldToLocal(this.universe.sunWorld, new THREE.Vector3()).normalize();
-    const axis = planet.axis.clone();
-    const morning = sunLocal.clone().applyAxisAngle(axis, -0.55).normalize();
+    const morning = sunLocal.clone().applyAxisAngle(planet.axis, -0.55).normalize();
+    const minH = planet.def.hasSea ? planet.seaLevel + 6 : -35;
     let best = null, bestScore = -Infinity;
-    const rng = (i) => Math.sin(i * 127.1) * 0.5 + 0.5;
-    for (let i = 0; i < 400; i++) {
+    const rng = (i) => Math.sin(i * 127.1 + planet.index * 17) * 0.5 + 0.5;
+    for (let i = 0; i < 500; i++) {
       const d = morning.clone().add(new THREE.Vector3(rng(i) - 0.5, rng(i + 1000) - 0.5, rng(i + 2000) - 0.5).multiplyScalar(0.7)).normalize();
       sampleSurface(planet.gen, d.x, d.y, d.z, _s);
-      if (_s.h < 6 || _s.h > 60 || _s.slope > 0.06) continue;
+      if (_s.h < minH || _s.h > 70 || _s.slope > 0.06) continue;
       const m = planet.gen.moisture(d.x, d.y, d.z);
-      const score = -Math.abs(m - 0.5) * 2 - _s.slope * 20 + d.dot(morning) * 2 - Math.abs(_s.h - 18) * 0.02;
+      const score = -Math.abs(m - 0.5) * 2 - _s.slope * 20 + d.dot(morning) * 2 - Math.abs(_s.h - minH - 12) * 0.02;
       if (score > bestScore) { bestScore = score; best = d; }
     }
     if (!best) best = morning;
@@ -103,12 +105,13 @@ export class Game {
     // player stands beside the cockpit, facing the ship's nose direction
     const left = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.ship.body.quat);
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.ship.body.quat);
-    const pLocal = this.ship.body.pos.clone().addScaledVector(left, 4.2).addScaledVector(fwd, -1.5);
+    const pLocal = this.ship.body.pos.clone().addScaledVector(left, 3.4).addScaledVector(fwd, 3.6);
     const dir = pLocal.clone().normalize();
     pLocal.copy(dir).multiplyScalar(planet.surfaceRadius(dir, false) + 0.05);
     const toward = this.ship.body.pos.clone().addScaledVector(fwd, 4).sub(pLocal);
     this.player.placeAt(planet, pLocal, toward);
     this.player.camFwd.copy(fwd).addScaledVector(dir, -fwd.dot(dir)).normalize().applyAxisAngle(dir, -0.6);
+    if (this.mode === 'ship') { this.mode = 'foot'; this.ship.piloted = false; this.astronaut.group.visible = true; }
     this._attach();
   }
 
@@ -247,9 +250,11 @@ export class Game {
       }
       for (const s of [-1, 1]) {
         const right = new THREE.Vector3(1, 0, 0).applyQuaternion(sb.quat);
-        const c = sb.pos.clone().addScaledVector(right, s * 3.0).addScaledVector(fwd, -1.2);
-        const base = c.normalize().multiplyScalar(ground + 1.2);
-        list.push({ x: base.x, y: base.y, z: base.z, r: 1.6, h: 0.9 });
+        for (const [lat, back, r] of [[2.6, -1.0, 1.3], [4.2, -2.0, 0.9]]) {
+          const c = sb.pos.clone().addScaledVector(right, s * lat).addScaledVector(fwd, back);
+          const base = c.normalize().multiplyScalar(ground - 0.3);
+          list.push({ x: base.x, y: base.y, z: base.z, r, h: 2.6 });
+        }
       }
     }
   }
@@ -284,7 +289,7 @@ export class Game {
     this.ship.piloted = false;
     const left = new THREE.Vector3(-1, 0, 0).applyQuaternion(sb.quat);
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(sb.quat);
-    const pLocal = sb.pos.clone().addScaledVector(left, 4.0).addScaledVector(fwd, 1.5);
+    const pLocal = sb.pos.clone().addScaledVector(left, 3.4).addScaledVector(fwd, 3.6);
     const dir = pLocal.clone().normalize();
     pLocal.copy(dir).multiplyScalar(planet.surfaceRadius(dir) + 0.3);
     this.player.placeAt(planet, pLocal, fwd);

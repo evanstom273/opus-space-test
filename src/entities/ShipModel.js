@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { part, mergeParts, mat, G, outlined } from '../render/geom.js';
 import { createFlameMaterial } from '../render/materials.js';
 
-const HULL = 0xe4e1d8, HULL2 = 0xb9b6ae, ORANGE = 0xd9662a, DARK = 0x2f343c, DARKER = 0x1c1f24, GLASS = 0x14212e;
+const HULL = 0xd6d2c8, HULL2 = 0xa9a69e, ORANGE = 0xd9662a, DARK = 0x2f343c, DARKER = 0x1c1f24, GLASS = 0x14212e;
 
 // Loft a hull through elliptical-octagon cross sections along Z.
 function loft(sections, sides = 10, sharp = 2.6) {

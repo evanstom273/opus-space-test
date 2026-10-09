@@ -119,6 +119,8 @@ export class Ship {
       b.vel.set(0, 0, 0);
       this._settle(dt, false);
       this.gear = Math.min(1, this.gear + dt * 1.5);
+      this.speed = 0;
+      this.heat = 0;
       if (ctl && (vertIn > 0 || fwdIn > 0)) {
         this.landed = false;
         b.vel.copy(_up.copy(b.pos).normalize()).multiplyScalar(7);
@@ -201,7 +203,9 @@ export class Ship {
     this.speed = b.vel.length();
 
     // atmospheric entry heating
-    const heatTarget = this.inAtmo ? THREE.MathUtils.clamp((this.speed - 160) / 260, 0, 1) * Math.min(1, this.density * 3) : 0;
+    let descending = 0;
+    if (b.frame && this.speed > 1) descending = THREE.MathUtils.smoothstep(-b.vel.dot(_up.copy(b.pos).normalize()) / this.speed, -0.1, 0.4);
+    const heatTarget = this.inAtmo ? THREE.MathUtils.clamp((this.speed - 200) / 220, 0, 1) * Math.min(1, this.density * 3) * descending : 0;
     this.heat += (heatTarget - this.heat) * (1 - Math.exp(-dt * 2.5));
 
     // --- ground interaction ------------------------------------------------------
@@ -268,8 +272,8 @@ export class Ship {
     const t = this.thrustVis;
     const idle = this.landed ? 0 : 0.18;
     for (const f of this.flames) {
-      const len = (idle + t * 2.6 + this.boost * 1.2) * (0.92 + Math.random() * 0.12);
-      f.scale.set(0.8 + t * 0.3, Math.max(0.001, len * 2.4), 0.8 + t * 0.3);
+      const len = Math.min(idle + t * 2.2 + this.boost * 0.9, 3.0) * (0.92 + Math.random() * 0.12);
+      f.scale.set(0.8 + t * 0.3, Math.max(0.001, len * 2.0), 0.8 + t * 0.3);
       f.visible = len > 0.01;
     }
     this.flameMat.uniforms.uTime.value = this.time;

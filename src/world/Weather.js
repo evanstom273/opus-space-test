@@ -4,8 +4,8 @@ import * as THREE from 'three';
 import { ATMO_PARS } from '../render/shaders.js';
 
 const PRESETS = {
-  pollen: { count: 500, color: [1.0, 0.85, 0.45], emit: 0.6, size: 0.05, wind: [0.6, 0.15, 0.3], fall: -0.05, swirl: 0.6, box: 50 },
-  dust: { count: 1600, color: [0.85, 0.6, 0.38], emit: 0.0, size: 0.05, wind: [7.0, 0.4, 2.5], fall: 0.1, swirl: 1.2, box: 60, stretch: 4 },
+  pollen: { count: 450, color: [1.0, 0.8, 0.35], emit: 0.4, size: 0.035, wind: [0.6, 0.15, 0.3], fall: -0.05, swirl: 0.6, box: 50 },
+  dust: { count: 1400, color: [0.62, 0.42, 0.26], emit: 0.0, size: 0.025, wind: [7.0, 0.4, 2.5], fall: 0.1, swirl: 1.2, box: 60, stretch: 3 },
   snow: { count: 1800, color: [0.95, 0.97, 1.0], emit: 0.15, size: 0.06, wind: [1.2, 0, 0.6], fall: 1.4, swirl: 0.8, box: 55 },
   embers: { count: 900, color: [1.0, 0.45, 0.12], emit: 3.5, size: 0.05, wind: [0.8, 0, 0.4], fall: -1.2, swirl: 1.0, box: 55, ash: true },
   spores: { count: 700, color: [0.45, 1.0, 0.9], emit: 2.2, size: 0.05, wind: [0.3, 0, 0.2], fall: -0.15, swirl: 0.7, box: 50, alt: [1.0, 0.5, 0.95] },

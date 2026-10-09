@@ -526,7 +526,9 @@ export function buildPatch(gen, face, x0, y0, size, skirtDepth) {
       const h = hts[k];
       const slope = 1 - (nx * dx + ny * dy + nz * dz);
       gen.colorize(dx, dy, dz, h, slope, col);
-      colors[o * 4] = col[0]; colors[o * 4 + 1] = col[1]; colors[o * 4 + 2] = col[2];
+      // fine mottling so close-up ground reads as textured
+      const mott = 1 + gen.n1.noise(dx * R / 5.5, dy * R / 5.5, dz * R / 5.5) * 0.1 + gen.n2.noise(dx * R / 17, dy * R / 17, dz * R / 17) * 0.07;
+      colors[o * 4] = col[0] * mott; colors[o * 4 + 1] = col[1] * mott; colors[o * 4 + 2] = col[2] * mott;
       colors[o * 4 + 3] = gen.emissive || 0;
       if (h < minH) minH = h;
       if (h > maxH) maxH = h;

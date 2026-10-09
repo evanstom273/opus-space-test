@@ -86,7 +86,7 @@ export class Pipeline {
     this.composer = new EffectComposer(renderer, rt);
     this.composer.setPixelRatio(this.pixelRatio);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(size, 0.42, 0.55, 2.2);
+    this.bloom = new UnrealBloomPass(size, 0.42, 0.55, 2.6);
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
