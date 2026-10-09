@@ -77,10 +77,13 @@ export class Game {
       this.audio.resume();
     });
     this.input.onLockChange = (locked) => this.hud.setLocked(locked);
-    if (isTouchDevice()) {
+    const enableTouch = () => {
+      if (this.touch) return;
       this.touch = new TouchControls(hudEl, this.input, this);
       this.hud.setTouch(true);
-    }
+    };
+    if (isTouchDevice()) enableTouch();
+    else window.addEventListener('touchstart', () => { enableTouch(); this.touch._begin(); }, { once: true, passive: true });
   }
 
   // Find a pleasant daytime landing spot and set the ship + player there.

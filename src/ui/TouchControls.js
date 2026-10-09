@@ -27,7 +27,7 @@ export class TouchControls {
     this.game = game;
     input.touchMode = true;
     this.root = document.createElement('div');
-    this.root.className = 'touch-ui';
+    this.root.className = 'touch-ui active';
     root.appendChild(this.root);
 
     this.joyBase = document.createElement('div');
@@ -82,6 +82,7 @@ export class TouchControls {
     el.addEventListener('touchstart', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      this._begin();
       if (d.toggle) {
         state.on = !state.on;
         if (state.on) input.keys.add(d.code); else input.keys.delete(d.code);
@@ -103,15 +104,17 @@ export class TouchControls {
     el.addEventListener('touchcancel', release, { passive: false });
   }
 
+  _begin() {
+    if (this.input.touchStarted) return false;
+    this.input.touchStarted = true;
+    this.game.hud.setLocked(true);
+    this.game.audio.resume();
+    return true;
+  }
+
   _start(e) {
     e.preventDefault();
-    if (!this.input.touchStarted) {
-      this.input.touchStarted = true;
-      this.game.hud.setLocked(true);
-      this.game.audio.resume();
-      this.root.classList.add('active');
-      return;
-    }
+    if (this._begin()) return;
     const w = window.innerWidth;
     for (const t of e.changedTouches) {
       if (t.clientX < w * 0.45 && !this.joy) {

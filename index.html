@@ -6,6 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Wayfarer</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="./style.css" />
   <script type="importmap">
     {
@@ -19,6 +20,18 @@
 <body>
   <div id="app"></div>
   <div id="hud"></div>
+  <div id="boot-error" style="display:none;position:fixed;left:12px;right:12px;top:12px;z-index:99;background:#5a1a1a;color:#fff;font:13px/1.4 system-ui,sans-serif;padding:10px 14px;border-radius:6px;white-space:pre-wrap"></div>
+  <script>
+    (function () {
+      var box = document.getElementById('boot-error');
+      function show(msg) { box.style.display = 'block'; box.textContent += (box.textContent ? '\n' : '') + msg; }
+      window.addEventListener('error', function (e) { show('Error: ' + (e.message || e) + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '')); });
+      window.addEventListener('unhandledrejection', function (e) { show('Error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)); });
+      setTimeout(function () {
+        if (!window.__game) show('The game did not start. Browser: ' + navigator.userAgent + (HTMLScriptElement.supports && HTMLScriptElement.supports('importmap') ? '' : ' (no import map support - please update your browser)'));
+      }, 12000);
+    })();
+  </script>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>
