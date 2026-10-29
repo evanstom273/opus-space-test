@@ -38,11 +38,11 @@ export class Planet {
     this.waterMat = def.hasSea ? createWaterMaterial(this.env, def) : null;
     this.terrain = new Terrain(this, service, this.terrainMat, this.waterMat);
 
-    const atmoGeo = new THREE.SphereGeometry(this.atmoTop, 96, 64);
+    const atmoGeo = new THREE.SphereGeometry(this.atmoTop, 64, 40);
     this.atmoMat = createAtmosphereMaterial(this.env, this.R - 25);
     this.atmosphere = new THREE.Mesh(atmoGeo, this.atmoMat);
     this.atmosphere.renderOrder = 5;
-    this.atmosphere.frustumCulled = false;
+    this.atmosphere.frustumCulled = true; // other planets' shells skip when off-screen
     this.root.add(this.atmosphere);
   }
 
