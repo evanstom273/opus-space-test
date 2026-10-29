@@ -1,6 +1,8 @@
 // DOM heads-up display: status, flight gauges, planet markers, prompts,
 // discovery toasts, help and journal panels, and the start screen.
 import * as THREE from 'three';
+import { settings, setSetting } from '../game/Settings.js';
+import { Q } from '../core/quality.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -21,7 +23,8 @@ function fmtDist(m) {
 const CONTROLS = [
   ['On foot', [['W A S D', 'Move'], ['Mouse', 'Look'], ['Shift', 'Sprint'], ['Space', 'Jump · hold for jetpack'], ['F', 'Board ship (when close)'], ['Wheel', 'Camera distance']]],
   ['Piloting', [['Mouse', 'Pitch & yaw (virtual stick)'], ['W / S', 'Thrust / brake'], ['A / D', 'Roll'], ['Space / C', 'Ascend / descend'], ['Shift', 'Boost · cruise drive in space'], ['Right mouse', 'Look around'], ['V', 'Camera distance'], ['F', 'Exit ship (when landed)']]],
-  ['General', [['Tab', 'Discovery journal'], ['T', 'Fast-forward time of day'], ['H', 'Toggle this help'], ['M', 'Mute audio'], ['Esc', 'Pause / release mouse']]],
+  ['General', [['Tab', 'Discovery journal'], ['L', 'Lamp: auto / on / off'], ['T', 'Fast-forward time of day'], ['O', 'Settings'], ['H', 'Toggle this help'], ['M', 'Mute audio'], ['Esc', 'Pause / release mouse']]],
+  ['Gamepad', [['Left stick', 'Move / steer'], ['Right stick', 'Look'], ['A', 'Jump · ascend'], ['B', 'Sprint · descend'], ['X', 'Board / exit'], ['RT / LT', 'Thrust / brake'], ['LB / RB', 'Roll'], ['Y', 'Boost'], ['Start', 'Journal']]],
 ];
 
 export class Hud {
@@ -68,6 +71,7 @@ export class Hud {
         <div class="start-tag">A sandbox of five worlds · fly, land, wander</div>
         <div class="start-load"><div class="start-load-fill"></div></div>
         <div class="start-click">Click to begin</div>
+        <div class="start-buttons"><button class="start-btn" data-act="settings">Settings</button></div>
         <div class="start-controls"></div>
         <div class="start-foot">No story. No loading screens. Every planet you see is a place you can walk on.</div>
       </div>`;
@@ -75,6 +79,10 @@ export class Hud {
     this.startClick = this.start.querySelector('.start-click');
     this._buildHelp(this.start.querySelector('.start-controls'), true);
     this.errorEl = el('div', 'hud-error hidden', root);
+    this.start.querySelector('[data-act="settings"]').addEventListener('click', (e) => { e.stopPropagation(); this.openSettings(); });
+    this.fpsEl = el('div', 'hud-fps hidden', root);
+    this._fpsT = 0;
+    this._buildSettings();
     if (game.params.has('autopilot')) this.start.classList.add('hidden');
     this.promptText = '';
     this.toastTimer = 0;
@@ -85,6 +93,7 @@ export class Hud {
     let html = compact ? '' : '<div class="panel-title">Controls</div>';
     html += '<div class="help-cols">';
     for (const [title, rows] of CONTROLS) {
+      if (compact && title === 'Gamepad') continue;
       html += `<div class="help-col"><div class="help-h">${title}</div>`;
       for (const [k, d] of rows) html += `<div class="help-row"><span class="key">${k}</span><span>${d}</span></div>`;
       html += '</div>';
@@ -108,6 +117,68 @@ export class Hud {
   }
 
   toggleHelp() { this.help.classList.toggle('hidden'); }
+
+  _buildSettings() {
+    const p = el('div', 'hud-panel hud-settings hidden', this.root);
+    p.innerHTML = `
+      <div class="panel-title">Settings</div>
+      <div class="set-grid">
+        <label for="set-sens">Look sensitivity <span class="set-val" data-val="sensitivity"></span></label>
+        <input id="set-sens" type="range" min="0.3" max="3" step="0.05" data-key="sensitivity">
+        <label for="set-invl">Invert look (on foot)</label><input id="set-invl" type="checkbox" data-key="invertLook">
+        <label for="set-invf">Invert flight pitch</label><input id="set-invf" type="checkbox" data-key="invertFlight">
+        <label for="set-q">Graphics quality</label>
+        <select id="set-q" data-key="quality"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low (phones)</option></select>
+        <label for="set-fps">Show frame rate</label><input id="set-fps" type="checkbox" data-key="showFps">
+        <label for="set-lamp">Lamp</label>
+        <select id="set-lamp" data-key="lamp"><option value="auto">Auto (after dark)</option><option value="on">Always on</option><option value="off">Off</option></select>
+        <label for="set-vol">Volume <span class="set-val" data-val="volume"></span></label>
+        <input id="set-vol" type="range" min="0" max="1" step="0.05" data-key="volume">
+      </div>
+      <div class="set-note hidden">Quality changes apply after a reload. <button data-act="reload">Reload now</button></div>
+      <div class="set-current"></div>
+      <div class="set-actions"><button data-act="close" class="primary">Done</button><button data-act="newgame" class="danger">New game</button></div>`;
+    this.settingsPanel = p;
+    const refresh = () => {
+      for (const inp of p.querySelectorAll('[data-key]')) {
+        const v = settings[inp.dataset.key];
+        if (inp.type === 'checkbox') inp.checked = !!v; else inp.value = String(v);
+      }
+      p.querySelector('[data-val="sensitivity"]').textContent = `${Number(settings.sensitivity).toFixed(2)}×`;
+      p.querySelector('[data-val="volume"]').textContent = `${Math.round(settings.volume * 100)}%`;
+      p.querySelector('.set-current').textContent = `Running: ${Q.name} quality`;
+    };
+    this._refreshSettings = refresh;
+    for (const inp of p.querySelectorAll('[data-key]')) {
+      inp.addEventListener(inp.type === 'range' ? 'input' : 'change', () => {
+        const k = inp.dataset.key;
+        const v = inp.type === 'checkbox' ? inp.checked : inp.type === 'range' ? parseFloat(inp.value) : inp.value;
+        setSetting(k, v);
+        if (k === 'quality') p.querySelector('.set-note').classList.toggle('hidden', (v === 'auto' ? (this.touch ? 'low' : 'high') : v) === Q.name);
+        refresh();
+      });
+    }
+    p.querySelector('[data-act="close"]').addEventListener('click', () => this.closeSettings());
+    p.querySelector('[data-act="reload"]').addEventListener('click', () => location.reload());
+    p.querySelector('[data-act="newgame"]').addEventListener('click', () => {
+      if (window.confirm('Start a new game? Your saved position and discoveries will be reset.')) this.game.newGame();
+    });
+    // keep panel input away from the game's touch/mouse handlers
+    for (const ev of ['touchstart', 'mousedown', 'wheel']) p.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+    refresh();
+  }
+
+  get settingsOpen() { return !this.settingsPanel.classList.contains('hidden'); }
+
+  openSettings() {
+    this._refreshSettings();
+    this.settingsPanel.classList.remove('hidden');
+    if (document.pointerLockElement) document.exitPointerLock?.();
+  }
+
+  closeSettings() { this.settingsPanel.classList.add('hidden'); }
+
+  toggleSettings() { if (this.settingsOpen) this.closeSettings(); else this.openSettings(); }
 
   toggleJournal() {
     this.journalOpen = !this.journalOpen;
@@ -169,6 +240,14 @@ export class Hud {
     // loading progress on the start screen
     const pending = u.service.pending;
     if (doText) this.startLoad.style.width = `${Math.max(5, 100 - Math.min(100, pending))}%`;
+
+    // frame-rate readout
+    this._fpsT -= dt;
+    if (this._fpsT <= 0) {
+      this._fpsT = 0.5;
+      this.fpsEl.classList.toggle('hidden', !settings.showFps);
+      if (settings.showFps) this._txt(this.fpsEl, `${Math.round(g.fps)} fps · ${Q.name} · ${g.pipeline.pixelRatio.toFixed(2)}× res`);
+    }
 
     const shipMode = g.mode === 'ship';
     const body = shipMode ? g.ship.body : g.player.body;

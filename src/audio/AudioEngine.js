@@ -1,5 +1,7 @@
 // Procedural WebAudio: wind, engines, jetpack, footsteps, creature calls,
 // UI chimes and a slow ambient pad that shifts with each world.
+import { settings, onSettingChange } from '../game/Settings.js';
+
 const PAD_CHORDS = {
   elysia: [220.0, 277.18, 329.63, 415.3],
   kharif: [196.0, 233.08, 293.66, 349.23],
@@ -30,7 +32,8 @@ export class AudioEngine {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -18; comp.ratio.value = 4;
     this.master = ctx.createGain();
-    this.master.gain.value = 0.7;
+    this.master.gain.value = 0.85 * settings.volume;
+    onSettingChange((k) => { if (k === 'volume' && !this.muted) this.master.gain.setTargetAtTime(0.85 * settings.volume, ctx.currentTime, 0.05); });
     this.master.connect(comp).connect(ctx.destination);
     // noise buffer
     const len = ctx.sampleRate * 2;
@@ -96,7 +99,7 @@ export class AudioEngine {
 
   toggleMute() {
     this.muted = !this.muted;
-    if (this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.7, this.ctx.currentTime, 0.1);
+    if (this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.85 * settings.volume, this.ctx.currentTime, 0.1);
   }
 
   _env(node, peak, attack, decay) {

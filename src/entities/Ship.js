@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { buildShip } from './ShipModel.js';
 import { sampleSurface } from '../world/terrainGen.js';
+import { settings } from '../game/Settings.js';
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -104,10 +105,11 @@ export class Ship {
       pitchKey = input.axis(['ArrowUp'], ['ArrowDown']);
       boostIn = input.down('ShiftLeft', 'ShiftRight');
       // virtual stick from mouse with auto-centering
-      if (input.stickActive) this.stick.set(input.stickX, input.stickY);
-      else if (!input.touchLooking) {
-        this.stick.x += input.mouseDX * 0.0042;
-        this.stick.y += input.mouseDY * 0.0042;
+      const inv = settings.invertFlight ? -1 : 1;
+      if (input.stickActive) this.stick.set(input.stickX, input.stickY * inv);
+      else if (!input.touchLooking && !input.padLooking) {
+        this.stick.x += input.mouseDX * 0.0042 * settings.sensitivity;
+        this.stick.y += input.mouseDY * 0.0042 * settings.sensitivity * inv;
       }
     }
     const center = Math.exp(-dt * 3.2);

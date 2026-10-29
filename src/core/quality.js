@@ -1,8 +1,11 @@
-// Graphics quality tiers. Touch devices default to "low"; override with
-// ?quality=low|high in the URL.
+// Graphics quality tiers. Touch devices default to "low". Precedence:
+// ?quality=low|high in the URL, then the saved setting, then the device default.
+import { settings } from '../game/Settings.js';
+
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
 const touch = typeof window !== 'undefined' && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
-const tier = params.get('quality') || (touch ? 'low' : 'high');
+const saved = settings.quality !== 'auto' ? settings.quality : null;
+const tier = params.get('quality') || saved || (touch ? 'low' : 'high');
 
 const TIERS = {
   high: {
