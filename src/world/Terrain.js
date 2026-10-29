@@ -48,14 +48,17 @@ function getIndices() {
     }
     edgeLists.push([grid, skirt]);
   }
-  for (const [grid, skirt] of edgeLists) {
+  edgeLists.forEach(([grid, skirt], e) => {
+    // one-sided skirts facing away from the patch (bottom/right vs top/left
+    // edges need opposite winding); a crack is always covered by the skirt
+    // of whichever neighbour faces the camera
+    const flip = e === 1 || e === 2;
     for (let k = 0; k < N - 1; k++) {
       const a = grid[k], b = grid[k + 1], c = skirt[k], d = skirt[k + 1];
-      // both windings so skirts are visible from either side
-      idx.push(a, c, b, b, c, d);
-      idx.push(a, b, c, b, d, c);
+      if (flip) idx.push(a, b, c, b, d, c);
+      else idx.push(a, c, b, b, c, d);
     }
-  }
+  });
   sharedIndex = new THREE.BufferAttribute(new Uint16Array(idx), 1);
   sharedWaterIndex = new THREE.BufferAttribute(new Uint16Array(water), 1);
   return [sharedIndex, sharedWaterIndex];
@@ -150,7 +153,7 @@ export class Terrain {
     mesh.position.set(res.center[0], res.center[1], res.center[2]);
     mesh.updateMatrix();
     mesh.matrixAutoUpdate = false;
-    mesh.castShadow = node.level >= this.maxLevel - 3;
+    mesh.castShadow = Q.terrainShadows && node.level >= this.maxLevel - 3;
     mesh.receiveShadow = true;
     mesh.visible = false;
     this.group.add(mesh);

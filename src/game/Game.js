@@ -169,6 +169,7 @@ export class Game {
       this.hud.setLoading(0.7, 'Compiling shaders');
       const pb = this.player.body;
       this.fauna.addWarmupActors(pb.frame, pb.pos, this.player.camFwd.clone());
+      this.flora.addWarmupActors(pb.frame, pb.pos.clone().addScaledVector(this.player.camFwd, 4));
       L.phase = 'compiling';
       L.t0 = L.t;
       const done = () => { L.phase = 'render'; L.frames = 0; };
@@ -186,6 +187,7 @@ export class Game {
       this.hud.setLoading(0.96, 'Preparing the first frame');
       if (++L.frames > 3) {
         this.fauna.removeWarmupActors();
+        this.flora.removeWarmupActors();
         L.phase = 'done';
       }
     }
@@ -351,7 +353,7 @@ export class Game {
     P.flora += performance.now() - t0; t0 = performance.now();
     this.fauna.update(dt, this, focusPlanet);
     P.fauna += performance.now() - t0; t0 = performance.now();
-    this.clouds.update(dt, u.time);
+    this.clouds.update(dt, u.time, this.camWorld);
     this.weather.update(dt, this, focusPlanet);
     this._discover(focusPlanet);
     P.misc += performance.now() - t0;

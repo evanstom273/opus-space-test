@@ -376,5 +376,10 @@ export const FLORA_INFO = {
 export function buildProp(id) {
   const b = B[id];
   if (!b) throw new Error(`unknown prop ${id}`);
-  return b();
+  const proto = b();
+  // extent of the model from its origin (used for culling bounds)
+  proto.geo.computeBoundingSphere();
+  const bs = proto.geo.boundingSphere;
+  proto.size = bs.center.length() + bs.radius;
+  return proto;
 }

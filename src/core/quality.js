@@ -9,17 +9,17 @@ const tier = params.get('quality') || saved || (touch ? 'low' : 'high');
 
 const TIERS = {
   high: {
-    name: 'high', msaa: 4, shadows: true, shadowSize: 2048, bloom: true,
+    name: 'high', msaa: 4, shadows: true, terrainShadows: true, shadowSize: 2048, bloom: true,
     vertexAtmoSteps: 6, outlineAtmoSteps: 4, skyAtmoSteps: 12, splitK: 1.9, levelOffset: 0, waterStride: 1, outlineRadius: 260, grass: true, floraDensity: 1,
     fauna: 38, cloudDetail: 2, outlines: true,
   },
   medium: {
-    name: 'medium', msaa: 0, shadows: true, shadowSize: 1024, bloom: true,
+    name: 'medium', msaa: 0, shadows: true, terrainShadows: false, shadowSize: 1024, bloom: true,
     vertexAtmoSteps: 4, outlineAtmoSteps: 2, skyAtmoSteps: 8, splitK: 1.5, levelOffset: 0, waterStride: 2, outlineRadius: 180, grass: false, floraDensity: 0.7,
     fauna: 24, cloudDetail: 1, outlines: true,
   },
   low: {
-    name: 'low', msaa: 0, shadows: false, shadowSize: 1024, bloom: false,
+    name: 'low', msaa: 0, shadows: false, terrainShadows: false, shadowSize: 1024, bloom: false,
     vertexAtmoSteps: 3, outlineAtmoSteps: 2, skyAtmoSteps: 6, splitK: 1.2, levelOffset: -1, waterStride: 2, outlineRadius: 110, grass: false, floraDensity: 0.45,
     fauna: 16, cloudDetail: 1, outlines: true,
   },
