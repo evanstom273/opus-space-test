@@ -179,7 +179,10 @@ export class Hud {
     }
     if (!c) return;
     const avg = sum / c;
-    this._txt(this.perfText, `${Math.round(1000 / avg)} fps · ${avg.toFixed(1)} ms avg · worst ${worst.toFixed(0)} ms\n${this.hitchTimes.length} hitches (>34 ms) in 10 s · CPU ${(work / c).toFixed(1)} ms · ${Q.name} · ${Math.round(this.game.pipeline.pixelRatio / (window.devicePixelRatio || 1) * 100)}% res`);
+    const st = this.game.pipeline.stats || { calls: 0, tris: 0 };
+    const cpu = work / c;
+    const bound = avg > cpu + 6 ? 'GPU-bound' : 'CPU-bound';
+    this._txt(this.perfText, `${Math.round(1000 / avg)} fps · ${avg.toFixed(1)} ms avg · worst ${worst.toFixed(0)} ms · ${this.hitchTimes.length} hitches/10 s\nCPU ${cpu.toFixed(1)} ms (${bound}) · ${st.calls} draws · ${(st.tris / 1e6).toFixed(2)}M tris · ${Q.name} · ${Math.round(this.game.pipeline.pixelRatio / (window.devicePixelRatio || 1) * 100)}% res`);
   }
 
   setLocked(locked) {
@@ -202,7 +205,7 @@ export class Hud {
         <label for="set-invl">Invert look (on foot)</label><input id="set-invl" type="checkbox" data-key="invertLook">
         <label for="set-invf">Invert flight pitch</label><input id="set-invf" type="checkbox" data-key="invertFlight">
         <label for="set-q">Graphics quality</label>
-        <select id="set-q" data-key="quality"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low (phones)</option></select>
+        <select id="set-q" data-key="quality"><option value="auto">Auto</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
         <label for="set-fps">Show performance graph</label><input id="set-fps" type="checkbox" data-key="showFps">
         <label for="set-lamp">Lamp</label>
         <select id="set-lamp" data-key="lamp"><option value="auto">Auto (after dark)</option><option value="on">Always on</option><option value="off">Off</option></select>

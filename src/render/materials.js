@@ -52,6 +52,9 @@ function lightsUniforms() {
 }
 
 const CEL_VERT = /* glsl */ `
+#ifndef ATMO_STEPS
+  #define ATMO_STEPS ${Q.vertexAtmoSteps}
+#endif
 #include <common>
 #include <skinning_pars_vertex>
 #include <shadowmap_pars_vertex>
@@ -105,7 +108,7 @@ void main() {
   vAmb = ambientAt(worldPosition.xyz, vNormalW);
   vec3 toV = worldPosition.xyz - cameraPosition;
   float dist = length(toV);
-  atmoScatter(cameraPosition, toV / max(dist, 1e-4), dist, ${Q.vertexAtmoSteps}, vInscatter, vTransmit);
+  atmoScatter(cameraPosition, toV / max(dist, 1e-4), dist, ATMO_STEPS, vInscatter, vTransmit);
 }
 `;
 
@@ -187,6 +190,8 @@ export function createCelMaterial(env, opts = {}) {
   const defines = {};
   if (opts.wind) defines.USE_WIND = '';
   if (opts.detail) defines.USE_DETAIL = '';
+  // fewer haze samples for small, numerous objects (props, creatures)
+  if (opts.atmoSteps) defines.ATMO_STEPS = String(opts.atmoSteps);
   const mat = new THREE.ShaderMaterial({
     uniforms, defines,
     vertexShader: CEL_VERT,

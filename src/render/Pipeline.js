@@ -95,6 +95,10 @@ export class Pipeline {
     this.grade = new ShaderPass(GradeShader);
     if (Q.bloom) {
       this.bloom = new UnrealBloomPass(size, 0.42, 0.55, 2.6);
+      // the glow is a blur, so build it from a half-size image: same look,
+      // a fraction of the fill cost at native resolution
+      const bloomSetSize = this.bloom.setSize.bind(this.bloom);
+      this.bloom.setSize = (w, h) => bloomSetSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
       this.composer.addPass(this.bloom);
       this.composer.addPass(this.grade);
     }
@@ -150,6 +154,10 @@ export class Pipeline {
 
   render(dt) {
     this.grade.uniforms.uTime.value += dt;
+    const info = this.renderer.info;
+    info.autoReset = false;
+    info.reset();
     this.composer.render(dt);
+    this.stats = { calls: info.render.calls, tris: info.render.triangles };
   }
 }
