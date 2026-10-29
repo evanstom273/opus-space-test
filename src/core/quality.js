@@ -1,5 +1,5 @@
 // Graphics quality tiers. Touch devices default to "low". Precedence:
-// ?quality=low|high in the URL, then the saved setting, then the device default.
+// ?quality=low|medium|high in the URL, then the saved setting, then the device default.
 import { settings } from '../game/Settings.js';
 
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
@@ -13,6 +13,11 @@ const TIERS = {
     vertexAtmoSteps: 6, outlineAtmoSteps: 4, skyAtmoSteps: 12, splitK: 1.9, levelOffset: 0, waterStride: 1, outlineRadius: 260, grass: true, floraDensity: 1,
     fauna: 38, cloudDetail: 2, outlines: true,
   },
+  medium: {
+    name: 'medium', msaa: 0, shadows: true, shadowSize: 1024, bloom: true,
+    vertexAtmoSteps: 4, outlineAtmoSteps: 2, skyAtmoSteps: 8, splitK: 1.5, levelOffset: 0, waterStride: 2, outlineRadius: 180, grass: false, floraDensity: 0.7,
+    fauna: 24, cloudDetail: 1, outlines: true,
+  },
   low: {
     name: 'low', msaa: 0, shadows: false, shadowSize: 1024, bloom: false,
     vertexAtmoSteps: 3, outlineAtmoSteps: 2, skyAtmoSteps: 6, splitK: 1.2, levelOffset: -1, waterStride: 2, outlineRadius: 110, grass: false, floraDensity: 0.45,
@@ -20,5 +25,13 @@ const TIERS = {
   },
 };
 
-export const Q = TIERS[tier] || TIERS.high;
+export const Q = { ...(TIERS[tier] || TIERS.high) };
+// Phones render at full native pixel density, where MSAA is barely visible but
+// very expensive on tile-based GPUs; per-pixel work is also trimmed there.
+if (touch) {
+  Q.msaa = 0;
+  Q.shadowSize = Math.min(Q.shadowSize, 1024);
+  Q.skyAtmoSteps = Math.min(Q.skyAtmoSteps, 8);
+  Q.vertexAtmoSteps = Math.min(Q.vertexAtmoSteps, 4);
+}
 export const IS_TOUCH = touch;

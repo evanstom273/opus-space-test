@@ -84,6 +84,7 @@ class Batch {
     const m = new THREE.InstancedMesh(this.proto.geo, mat, cap);
     m.userData.capacity = cap;
     m.count = 0;
+    m.visible = false;
     m.frustumCulled = false;
     m.castShadow = kind === 'shadow';
     m.receiveShadow = kind === 'mesh';
@@ -92,6 +93,13 @@ class Batch {
     root.add(m);
     this[kind] = m;
     return m;
+  }
+
+  // Empty batches are hidden so they cost no draw calls (main or shadow pass).
+  _syncVis() {
+    this.mesh.visible = this.mesh.count > 0;
+    if (this.outline) this.outline.visible = this.outline.count > 0;
+    if (this.shadow) this.shadow.visible = this.shadow.count > 0;
   }
 
   _ensureCapacity(top) {
@@ -121,6 +129,7 @@ class Batch {
     this.cells.add(cell);
     this._write(cell);
     this.mesh.count = this.slots.top;
+    this._syncVis();
     this.nearDirty = true;
   }
 
@@ -133,6 +142,7 @@ class Batch {
     m.instanceMatrix.needsUpdate = true;
     this.slots.release(cell.slot, cell.count);
     m.count = this.slots.top;
+    this._syncVis();
     this.nearDirty = true;
     // heavy fragmentation: compact everything once
     if (this.slots.top > 512 && this.slots.top > this.slots.live * 2) this._compact();
@@ -152,6 +162,7 @@ class Batch {
     m.instanceMatrix.needsUpdate = true;
     m.instanceColor.needsUpdate = true;
     m.count = this.slots.top;
+    this._syncVis();
   }
 
   // Near subsets for outlines and shadow casting, refreshed as the focus moves.
@@ -180,6 +191,7 @@ class Batch {
       mesh.count = n;
       mesh.instanceMatrix.needsUpdate = true;
     }
+    this._syncVis();
   }
 }
 
@@ -191,11 +203,11 @@ export class Flora {
       const env = planet.env;
       const windMats = new Map(), outlineWind = new Map();
       const mats = {
-        solid: createCelMaterial(env, { rim: 0.3, emitScale: 2.5 }),
-        gloss: createCelMaterial(env, { rim: 0.5, gloss: 1.2, emitScale: 2.5 }),
+        solid: createCelMaterial(env, { rim: 0.3, emitScale: 2.5, atmoSteps: 2 }),
+        gloss: createCelMaterial(env, { rim: 0.5, gloss: 1.2, emitScale: 2.5, atmoSteps: 2 }),
         outline: createOutlineMaterial(env, { width: 0.03, far: 700 }),
         windFor: (w) => {
-          if (!windMats.has(w)) windMats.set(w, createCelMaterial(env, { rim: 0.3, wind: w, emitScale: 2.5, side: THREE.DoubleSide }));
+          if (!windMats.has(w)) windMats.set(w, createCelMaterial(env, { rim: 0.3, wind: w, emitScale: 2.5, side: THREE.DoubleSide, atmoSteps: 2 }));
           return windMats.get(w);
         },
         outlineWindFor: (w) => {

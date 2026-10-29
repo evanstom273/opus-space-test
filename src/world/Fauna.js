@@ -33,8 +33,8 @@ export class Fauna {
     this.playerLocal = new THREE.Vector3();
     for (const p of universe.planets) {
       this.mats.set(p, {
-        cel: createCelMaterial(p.env, { rim: 0.45, emitScale: 2.5 }),
-        celDouble: createCelMaterial(p.env, { rim: 0.45, emitScale: 2.5, side: THREE.DoubleSide }),
+        cel: createCelMaterial(p.env, { rim: 0.45, emitScale: 2.5, atmoSteps: 2 }),
+        celDouble: createCelMaterial(p.env, { rim: 0.45, emitScale: 2.5, side: THREE.DoubleSide, atmoSteps: 2 }),
         outline: createOutlineMaterial(p.env, { width: 0.025, far: 500 }),
       });
       this.herds.set(p, new Map());
