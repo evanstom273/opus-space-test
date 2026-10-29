@@ -11,6 +11,8 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _e = new THREE.Vector3();
+const _g = new THREE.Vector3();
+const _h = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _s = { h: 0, nx: 0, ny: 0, nz: 0, slope: 0 };
 
@@ -259,24 +261,33 @@ export class Player {
     const right = _a.crossVectors(this.camFwd, up).normalize();
     const f = _b.copy(this.camFwd).applyAxisAngle(right, this.camPitch);
     const pivot = _c.copy(pos).addScaledVector(up, 1.55).addScaledVector(right, 0.32);
-    // Sample along the camera boom and pull the camera in where terrain
-    // (or water) would block the view; pull in fast, ease back out slowly.
-    let allowed = this.camDist;
+    // Put the camera at its full distance; where the ground rises behind the
+    // player, lift it above the ground (keeping the distance) instead of
+    // pulling it in. Only pull in along the lifted line of sight if terrain
+    // still blocks it (e.g. a cliff right behind). Pull in fast, ease out slowly.
+    const cam = _d.copy(pivot).addScaledVector(f, -this.camDist);
+    const g0 = planet.surfaceRadius(_e.copy(cam).normalize()) + 0.6;
+    const lift = g0 - cam.length();
+    // gentle rises: lift; walls/cliffs (big lift): leave it and pull in below
+    if (lift > 0 && lift <= 5) cam.setLength(g0);
+    const boom = _g.copy(cam).sub(pivot);
+    const len = Math.max(1e-3, boom.length());
+    boom.multiplyScalar(1 / len);
+    let allowed = len;
     for (let i = 1; i <= 8; i++) {
-      const t = (i / 8) * this.camDist;
-      const p = _d.copy(pivot).addScaledVector(f, -t);
-      const g = planet.surfaceRadius(_e.copy(p).normalize()) + 0.35;
-      if (p.length() < g) { allowed = Math.max(0.9, t - this.camDist / 8 - 0.2); break; }
+      const t = (i / 8) * len;
+      const p = _e.copy(pivot).addScaledVector(boom, t);
+      const g = planet.surfaceRadius(_h.copy(p).normalize()) + 0.3;
+      if (p.length() < g) { allowed = Math.max(1.2, t - len / 8 - 0.2); break; }
     }
     if (this.camBlock === undefined || allowed < this.camBlock) this.camBlock = allowed;
     else this.camBlock += (allowed - this.camBlock) * Math.min(1, (this.lastDt || 0.016) * 2.5);
-    outPos.copy(pivot).addScaledVector(f, -Math.min(this.camDist, this.camBlock));
+    outPos.copy(pivot).addScaledVector(boom, Math.min(len, this.camBlock));
     this.camPivot = (this.camPivot || new THREE.Vector3()).copy(pivot);
-    // keep the camera above ground / water
-    const cd = outPos.clone().normalize();
-    let ground = planet.surfaceRadius(cd) + 0.45;
-    const r = outPos.length();
-    if (r < ground) outPos.setLength(ground);
+    // final safety: never below the ground / water surface
+    const cd = _h.copy(outPos).normalize();
+    const ground = planet.surfaceRadius(cd) + 0.45;
+    if (outPos.length() < ground) outPos.setLength(ground);
     const look = pivot.clone().addScaledVector(f, 2.0);
     _m.lookAt(outPos, look, up);
     outQuat.setFromRotationMatrix(_m);
