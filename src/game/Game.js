@@ -75,6 +75,10 @@ export class Game {
     this._spawn();
     this.lampLevel = 0;
     this.saveTimer = 8;
+    // Launch sequence: terrain -> creature models -> shader warm-up.
+    this.ready = false;
+    this.loading = { phase: 'terrain', t: 0, frames: 0, maxPend: 1 };
+    this.universe.service.budgetMs = 14;
     const testMode = this.params.has('autopilot') || this.params.has('fresh');
     const saved = testMode ? null : readSave();
     if (saved) {
@@ -92,6 +96,7 @@ export class Game {
     window.addEventListener('pagehide', persist);
 
     this.pipeline.renderer.domElement.addEventListener('click', () => {
+      if (!this.ready) return;
       this.input.requestLock();
       this.audio.resume();
     });
@@ -140,6 +145,55 @@ export class Game {
     this.player.camFwd.copy(fwd).addScaledVector(dir, -fwd.dot(dir)).normalize().applyAxisAngle(dir, -0.6);
     if (this.mode === 'ship') { this.mode = 'foot'; this.ship.piloted = false; this.astronaut.group.visible = true; }
     this._attach();
+  }
+
+  // Loading screen: generate nearby terrain, build creature models, then
+  // compile every shader variant (and render a few hidden frames so the
+  // shadow-pass variants compile too) before the game becomes playable.
+  _updateLoading(dt) {
+    if (this.ready) return;
+    const L = this.loading;
+    L.t += dt;
+    const svc = this.universe.service;
+    if (L.phase === 'terrain') {
+      const pend = svc.pending;
+      L.maxPend = Math.max(L.maxPend, pend);
+      const frac = this.universe.ready ? 1 - pend / L.maxPend : 0;
+      this.hud.setLoading(0.05 + 0.55 * Math.max(0, frac), 'Generating terrain');
+      if ((this.universe.ready && pend <= 2 && L.t > 1.5) || L.t > 30) L.phase = 'creatures';
+    } else if (L.phase === 'creatures') {
+      this.hud.setLoading(0.62, 'Building creatures');
+      this.fauna.prebuild();
+      L.phase = this.noRender ? 'done' : 'compile';
+    } else if (L.phase === 'compile') {
+      this.hud.setLoading(0.7, 'Compiling shaders');
+      const pb = this.player.body;
+      this.fauna.addWarmupActors(pb.frame, pb.pos, this.player.camFwd.clone());
+      L.phase = 'compiling';
+      L.t0 = L.t;
+      const done = () => { L.phase = 'render'; L.frames = 0; };
+      // Compile against the composer's HDR target: shader variants depend on
+      // the target (tone mapping / colour space), not just the material.
+      const renderer = this.pipeline.renderer;
+      const prevTarget = renderer.getRenderTarget();
+      renderer.setRenderTarget(this.pipeline.composer.renderTarget1);
+      const pending = renderer.compileAsync(this.scene, this.pipeline.camera);
+      renderer.setRenderTarget(prevTarget);
+      pending.then(done, done);
+    } else if (L.phase === 'compiling') {
+      this.hud.setLoading(Math.min(0.93, 0.7 + (L.t - L.t0) * 0.04), 'Compiling shaders');
+    } else if (L.phase === 'render') {
+      this.hud.setLoading(0.96, 'Preparing the first frame');
+      if (++L.frames > 3) {
+        this.fauna.removeWarmupActors();
+        L.phase = 'done';
+      }
+    }
+    if (L.phase === 'done') {
+      this.ready = true;
+      svc.budgetMs = 2.5;
+      this.hud.setReady();
+    }
   }
 
   // Restore a saved session (see SaveGame.js).
@@ -202,9 +256,10 @@ export class Game {
       this.last = now;
       this.fps += (1 / Math.max(raw, 1e-3) - this.fps) * 0.05;
       const dt = this.fixedDt || Math.min(0.05, raw);
-      this.pipeline.adaptResolution(raw);
       try {
+        const w0 = performance.now();
         this.frame(dt);
+        this.hud.recordFrame(raw * 1000, performance.now() - w0);
       } catch (err) {
         console.error(err);
         this.hud.error(err);
@@ -218,8 +273,10 @@ export class Game {
   frame(dt) {
     const u = this.universe;
     const input = this.input;
+    this._updateLoading(dt);
     input.pollGamepad(dt, this.mode);
-    if (input.padJustActivated) {
+    if (this.ready && input.padActive && !this._padStarted && (input.padJustActivated || input.pressed.size)) {
+      this._padStarted = true;
       this.hud.setLocked(true);
       this.audio.resume();
       this.hud.toast('Gamepad connected', input.padName.slice(0, 48));
@@ -247,7 +304,7 @@ export class Game {
     for (const p of u.planets) p.updateRotation(u.time);
 
     const tPre = performance.now();
-    const controls = input.locked || this.params.has('autopilot') || (input.touchMode && input.touchStarted) || input.padActive;
+    const controls = this.ready && (input.locked || this.params.has('autopilot') || (input.touchMode && input.touchStarted) || input.padActive);
     if (this.touch) this.touch.update();
     const T = input.touchMode;
     if (this.mode === 'foot') {

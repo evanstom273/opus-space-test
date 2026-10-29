@@ -50,9 +50,9 @@ export class Pipeline {
     });
     const params = new URLSearchParams(location.search);
     this.lowres = params.has('lowres');
-    this.maxPixelRatio = this.lowres ? 0.5 : Math.min(window.devicePixelRatio || 1, Q.pixelRatioMax);
-    this.pixelRatio = this.maxPixelRatio;
-    this.adapt = { t: 0, frames: 0, time: 0, cooldown: 4, enabled: !params.has('fixeddt') };
+    // Fixed render scale per quality tier (no dynamic resolution: it softens
+    // the image and every change reallocates the render targets).
+    this.pixelRatio = this.lowres ? 0.5 : Math.min(window.devicePixelRatio || 1, Q.pixelRatioMax);
     renderer.setPixelRatio(this.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = Q.shadows;
@@ -98,31 +98,6 @@ export class Pipeline {
     this.composer.addPass(new OutputPass());
 
     window.addEventListener('resize', () => this.resize());
-  }
-
-  // Adaptive resolution: drop the render scale when the frame rate sags,
-  // raise it again when there is headroom.
-  adaptResolution(rawDt) {
-    const a = this.adapt;
-    if (!a.enabled) return;
-    a.frames++;
-    a.time += rawDt;
-    a.cooldown -= rawDt;
-    if (a.time < 2) return;
-    const fps = a.frames / a.time;
-    a.frames = 0;
-    a.time = 0;
-    if (a.cooldown > 0) return;
-    let pr = this.pixelRatio;
-    if (fps < 42) pr = Math.max(Q.pixelRatioMin, pr * (fps < 28 ? 0.75 : 0.87));
-    else if (fps > 57) pr = Math.min(this.maxPixelRatio, pr * 1.1);
-    if (Math.abs(pr - this.pixelRatio) > 0.01) {
-      this.pixelRatio = pr;
-      this.renderer.setPixelRatio(pr);
-      this.composer.setPixelRatio(pr);
-      this.resize();
-      a.cooldown = 3;
-    }
   }
 
   resize() {

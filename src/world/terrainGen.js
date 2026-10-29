@@ -585,6 +585,45 @@ export function buildPatch(gen, face, x0, y0, size, skirtDepth) {
 
 // --- scatter placement --------------------------------------------------------
 
+// Per-instance transform matrices (column-major, like three.js) and tint
+// colours, computed here so the main thread only copies them into buffers.
+// data layout per instance: px, py, pz, upx, upy, upz, scale, yaw, extra
+function instanceArrays(data) {
+  const n = data.length / 9;
+  const matrices = new Float32Array(n * 16);
+  const colors = new Float32Array(n * 3);
+  const rand = mulberry32(Math.floor(data[0] * 13 + data[2] * 7) | 0);
+  for (let i = 0; i < n; i++) {
+    const k = i * 9;
+    const ux = data[k + 3], uy = data[k + 4], uz = data[k + 5];
+    const sc = data[k + 6], yaw = data[k + 7];
+    // q1 rotates +Y onto the up vector, q2 spins around +Y by yaw; q = q1 * q2
+    let ax, ay, az, aw;
+    if (uy < -0.999999) { ax = 1; ay = 0; az = 0; aw = 0; }
+    else {
+      ax = uz; ay = 0; az = -ux; aw = uy + 1;
+      const l = Math.hypot(ax, ay, az, aw);
+      ax /= l; ay /= l; az /= l; aw /= l;
+    }
+    const bs = Math.sin(yaw / 2), bw = Math.cos(yaw / 2);
+    const x = ax * bw - az * bs, y = ay * bw + aw * bs, z = az * bw + ax * bs, w = aw * bw - ay * bs;
+    const sx = sc, sy = sc * (0.9 + data[k + 8] * 0.25), sz = sc;
+    const x2 = x + x, y2 = y + y, z2 = z + z;
+    const xx = x * x2, xy = x * y2, xz = x * z2, yy = y * y2, yz = y * z2, zz = z * z2;
+    const wx = w * x2, wy = w * y2, wz = w * z2;
+    const o = i * 16;
+    matrices[o] = (1 - (yy + zz)) * sx; matrices[o + 1] = (xy + wz) * sx; matrices[o + 2] = (xz - wy) * sx; matrices[o + 3] = 0;
+    matrices[o + 4] = (xy - wz) * sy; matrices[o + 5] = (1 - (xx + zz)) * sy; matrices[o + 6] = (yz + wx) * sy; matrices[o + 7] = 0;
+    matrices[o + 8] = (xz + wy) * sz; matrices[o + 9] = (yz - wx) * sz; matrices[o + 10] = (1 - (xx + yy)) * sz; matrices[o + 11] = 0;
+    matrices[o + 12] = data[k]; matrices[o + 13] = data[k + 1]; matrices[o + 14] = data[k + 2]; matrices[o + 15] = 1;
+    const v = 0.86 + rand() * 0.28;
+    const hue = (rand() - 0.5) * 0.08;
+    colors[i * 3] = v * (1 + hue); colors[i * 3 + 1] = v; colors[i * 3 + 2] = v * (1 - hue);
+  }
+  return { matrices, colors };
+}
+
+
 const _b = { h: 0, nx: 0, ny: 0, nz: 0, slope: 0, m: 0 };
 
 export function buildScatter(gen, tier, face, level, x0, y0, size, wantSpawns, density = 1) {
@@ -594,7 +633,7 @@ export function buildScatter(gen, tier, face, level, x0, y0, size, wantSpawns, d
   const edge = R * size * (Math.PI / 4);
   const areaHa = (edge * edge) / 10000;
   const d = [0, 0, 0];
-  const out = {};
+  const out = {}, mats = {}, cols = {};
   const seedBase = hash32(gen.seed, face, level, Math.round(x0 * 1e6), Math.round(y0 * 1e6), tier);
   for (let ri = 0; ri < rules.length; ri++) {
     const rule = rules[ri];
@@ -621,6 +660,9 @@ export function buildScatter(gen, tier, face, level, x0, y0, size, wantSpawns, d
       data.push(d[0] * r, d[1] * r, d[2] * r, ux, uy, uz, scale, yaw, extra);
     }
     out[rule.id] = new Float32Array(data);
+    const inst = instanceArrays(out[rule.id]);
+    mats[rule.id] = inst.matrices;
+    cols[rule.id] = inst.colors;
   }
   const spawns = [];
   if (wantSpawns && gen.spawns.length) {
@@ -636,7 +678,7 @@ export function buildScatter(gen, tier, face, level, x0, y0, size, wantSpawns, d
       spawns.push({ id: sp.id, dir: [d[0], d[1], d[2]], count: n, seed: Math.floor(rand() * 1e9) });
     }
   }
-  return { types: out, spawns };
+  return { types: out, mats, cols, spawns };
 }
 
 export { smoothstep, clamp };

@@ -167,3 +167,11 @@ html, body { overscroll-behavior: none; -webkit-user-select: none; user-select: 
 .hud-settings button.danger { color: #ff9a8a; border-color: rgba(255,120,100,.4); }
 #hud.is-touch .hud-settings { max-height: calc(100vh - 24px); padding: 14px 18px; }
 #hud.is-touch .set-grid { gap: 8px 14px; }
+
+/* ---- performance overlay ---- */
+.hud-perf { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.hud-perf canvas { width: 240px; height: 64px; border-radius: 3px; image-rendering: pixelated; }
+.perf-text { font: 10.5px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #dfe; background: rgba(0,0,0,.5); padding: 2px 7px; border-radius: 3px; white-space: pre; text-align: center; }
+.hud-fps { display: none; }
+.hud-start.loading .start-click { animation: none; color: var(--dim); }
+.hud-start.loading .start-buttons { visibility: hidden; }

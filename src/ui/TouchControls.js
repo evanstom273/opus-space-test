@@ -66,6 +66,8 @@ export class TouchControls {
     }
     this.root.appendChild(util);
 
+    this.lookX = 0;
+    this.lookY = 0;
     this.joy = null;  // { id, x0, y0 }
     this.look = null; // { id, x, y }
     const canvas = game.pipeline.renderer.domElement;
@@ -105,7 +107,7 @@ export class TouchControls {
   }
 
   _begin() {
-    if (this.input.touchStarted) return false;
+    if (this.input.touchStarted || !this.game.ready) return false;
     this.input.touchStarted = true;
     this.game.hud.setLocked(true);
     this.game.audio.resume();
@@ -114,6 +116,7 @@ export class TouchControls {
 
   _start(e) {
     e.preventDefault();
+    if (!this.game.ready) return;
     if (this._begin()) return;
     const w = window.innerWidth;
     for (const t of e.changedTouches) {
@@ -140,8 +143,10 @@ export class TouchControls {
         if (m > 1) { dx /= m; dy /= m; }
         this._setStick(dx, dy);
       } else if (this.look && t.identifier === this.look.id) {
-        this.input.mouseDX += (t.clientX - this.look.x) * 1.6;
-        this.input.mouseDY += (t.clientY - this.look.y) * 1.6;
+        // accumulate; drained smoothly each frame in update() so uneven
+        // touch event timing doesn't make the camera judder
+        this.lookX += (t.clientX - this.look.x) * 1.6;
+        this.lookY += (t.clientY - this.look.y) * 1.6;
         this.look.x = t.clientX;
         this.look.y = t.clientY;
       }
@@ -172,6 +177,15 @@ export class TouchControls {
 
   update() {
     const g = this.game;
+    if (this.lookX || this.lookY) {
+      const k = 0.6;
+      const dx = this.lookX * k, dy = this.lookY * k;
+      this.input.mouseDX += dx;
+      this.input.mouseDY += dy;
+      this.lookX -= dx;
+      this.lookY -= dy;
+      if (Math.abs(this.lookX) < 0.05 && Math.abs(this.lookY) < 0.05) { this.lookX = 0; this.lookY = 0; }
+    }
     const ship = g.mode === 'ship';
     this.groups.foot.classList.toggle('show', !ship);
     this.groups.ship.classList.toggle('show', ship);
