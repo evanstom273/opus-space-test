@@ -179,7 +179,7 @@ export class Hud {
     }
     if (!c) return;
     const avg = sum / c;
-    this._txt(this.perfText, `${Math.round(1000 / avg)} fps · ${avg.toFixed(1)} ms avg · worst ${worst.toFixed(0)} ms\n${this.hitchTimes.length} hitches (>34 ms) in 10 s · CPU ${(work / c).toFixed(1)} ms · ${Q.name} ${this.game.pipeline.pixelRatio.toFixed(2)}×`);
+    this._txt(this.perfText, `${Math.round(1000 / avg)} fps · ${avg.toFixed(1)} ms avg · worst ${worst.toFixed(0)} ms\n${this.hitchTimes.length} hitches (>34 ms) in 10 s · CPU ${(work / c).toFixed(1)} ms · ${Q.name} · ${Math.round(this.game.pipeline.pixelRatio / (window.devicePixelRatio || 1) * 100)}% res`);
   }
 
   setLocked(locked) {

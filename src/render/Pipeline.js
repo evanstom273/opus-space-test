@@ -50,9 +50,9 @@ export class Pipeline {
     });
     const params = new URLSearchParams(location.search);
     this.lowres = params.has('lowres');
-    // Fixed render scale per quality tier (no dynamic resolution: it softens
-    // the image and every change reallocates the render targets).
-    this.pixelRatio = this.lowres ? 0.5 : Math.min(window.devicePixelRatio || 1, Q.pixelRatioMax);
+    // Always render at the display's native resolution (every physical pixel).
+    // Quality tiers trade geometry and effects, never resolution.
+    this.pixelRatio = this._nativeRatio();
     renderer.setPixelRatio(this.pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = Q.shadows;
@@ -87,7 +87,10 @@ export class Pipeline {
       samples: this.lowres ? 0 : Q.msaa,
     });
     this.composer = new EffectComposer(renderer, rt);
+    // EffectComposer takes a supplied target's size as CSS size; reset it so
+    // the buffers are exactly the canvas size (not pixelRatio^2 too large).
     this.composer.setPixelRatio(this.pixelRatio);
+    this.composer.setSize(size.x, size.y);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.grade = new ShaderPass(GradeShader);
     if (Q.bloom) {
@@ -96,12 +99,24 @@ export class Pipeline {
       this.composer.addPass(this.grade);
     }
     this.composer.addPass(new OutputPass());
+    this.composer.setSize(size.x, size.y);
 
     window.addEventListener('resize', () => this.resize());
   }
 
+  _nativeRatio() {
+    return this.lowres ? 0.5 : window.devicePixelRatio || 1;
+  }
+
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
+    // follow display changes (moving between monitors, folding/unfolding)
+    const pr = this._nativeRatio();
+    if (pr !== this.pixelRatio) {
+      this.pixelRatio = pr;
+      this.renderer.setPixelRatio(pr);
+      this.composer.setPixelRatio(pr);
+    }
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
