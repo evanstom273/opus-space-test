@@ -57,7 +57,7 @@ export class TouchControls {
     // small utility buttons (journal, time of day, camera)
     const util = document.createElement('div');
     util.className = 'touch-util';
-    for (const [label, code] of [['LOG', 'Tab'], ['TIME', 'KeyT'], ['CAM', 'KeyV']]) {
+    for (const [label, code] of [['LOG', 'Tab'], ['LAMP', 'KeyL'], ['TIME', 'KeyT'], ['CAM', 'KeyV'], ['⚙', 'KeyO']]) {
       const b = document.createElement('div');
       b.className = 'tbtn small';
       b.textContent = label;

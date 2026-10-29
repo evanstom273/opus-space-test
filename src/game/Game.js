@@ -4,7 +4,9 @@ import * as THREE from 'three';
 import { Pipeline } from '../render/Pipeline.js';
 import { Universe } from '../world/Universe.js';
 import { Input } from './Input.js';
-import { createEnv, copyEnv, createCelMaterial, createOutlineMaterial } from '../render/materials.js';
+import { createEnv, copyEnv, createCelMaterial, createOutlineMaterial, LAMP } from '../render/materials.js';
+import { settings, setSetting } from './Settings.js';
+import { writeSave, readSave, clearSave } from './SaveGame.js';
 import { Astronaut } from '../entities/Astronaut.js';
 import { Player } from '../entities/Player.js';
 import { Ship } from '../entities/Ship.js';
@@ -71,6 +73,23 @@ export class Game {
     this.fixedDt = this.params.has('fixeddt') ? parseFloat(this.params.get('fixeddt')) || 0.033 : 0;
 
     this._spawn();
+    this.lampLevel = 0;
+    this.saveTimer = 8;
+    const testMode = this.params.has('autopilot') || this.params.has('fresh');
+    const saved = testMode ? null : readSave();
+    if (saved) {
+      try {
+        this._restore(saved);
+        const where = this.mode === 'ship' && !this.ship.body.frame ? 'in deep space' : `on ${(this.mode === 'ship' ? this.ship.body.frame : this.player.body.frame).name}`;
+        this.hud.start.querySelector('.start-foot').textContent = `Welcome back. Resuming ${where}, where you left off.`;
+      } catch (e) {
+        console.warn('Could not restore save', e);
+        this._spawn();
+      }
+    }
+    const persist = () => { if (!testMode && !this._noSave) writeSave(this); };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
+    window.addEventListener('pagehide', persist);
 
     this.pipeline.renderer.domElement.addEventListener('click', () => {
       this.input.requestLock();
@@ -123,6 +142,53 @@ export class Game {
     this._attach();
   }
 
+  // Restore a saved session (see SaveGame.js).
+  _restore(d) {
+    const u = this.universe;
+    u.time = d.time || 0;
+    for (const p of u.planets) p.updateRotation(u.time);
+    const pl = u.planets[d.player.planet] || u.planets[0];
+    const pp = new THREE.Vector3(...d.player.pos);
+    const dir = pp.clone().normalize();
+    pp.copy(dir).multiplyScalar(Math.max(pp.length(), pl.surfaceRadius(dir, false) + 0.05));
+    this.player.placeAt(pl, pp, new THREE.Vector3(...d.player.heading));
+    this.player.camFwd.set(...d.player.camFwd);
+    this.player.camPitch = Number.isFinite(d.player.camPitch) ? d.player.camPitch : -0.15;
+    const sb = this.ship.body;
+    sb.frame = d.ship.planet >= 0 ? u.planets[d.ship.planet] || null : null;
+    sb.pos.set(...d.ship.pos);
+    sb.vel.set(...d.ship.vel);
+    sb.quat.set(...d.ship.quat).normalize();
+    this.ship.landed = !!d.ship.landed && !!sb.frame;
+    this.ship.gear = Number.isFinite(d.ship.gear) ? d.ship.gear : (this.ship.landed ? 1 : 0);
+    if (this.ship.landed) {
+      sb.vel.set(0, 0, 0);
+      this.ship._settle(1, true);
+    } else if (sb.frame) {
+      const sd = sb.pos.clone().normalize();
+      const g = sb.frame.surfaceRadius(sd) + 3;
+      if (sb.pos.length() < g) sb.pos.setLength(g);
+    }
+    if (d.mode === 'ship') {
+      this.mode = 'ship';
+      this.ship.piloted = true;
+      this.astronaut.group.visible = false;
+      this.shipCam.init = false;
+    } else {
+      this.mode = 'foot';
+      this.ship.piloted = false;
+      this.astronaut.group.visible = true;
+    }
+    this._attach();
+  }
+
+  newGame() {
+    this._noSave = true;
+    clearSave();
+    try { localStorage.removeItem('wayfarer-discoveries'); } catch (e) { /* ignore */ }
+    location.reload();
+  }
+
   _attach() {
     const pl = this.player.body.frame;
     if (this.astronaut.group.parent !== pl.root) pl.root.add(this.astronaut.group);
@@ -152,6 +218,24 @@ export class Game {
   frame(dt) {
     const u = this.universe;
     const input = this.input;
+    input.pollGamepad(dt, this.mode);
+    if (input.padJustActivated) {
+      this.hud.setLocked(true);
+      this.audio.resume();
+      this.hud.toast('Gamepad connected', input.padName.slice(0, 48));
+    }
+    if (input.hit('KeyO')) this.hud.toggleSettings();
+    if (input.hit('KeyL')) {
+      const order = ['auto', 'on', 'off'];
+      const next = order[(order.indexOf(settings.lamp) + 1) % 3];
+      setSetting('lamp', next);
+      this.hud.toast(`Lamp: ${next === 'auto' ? 'automatic (after dark)' : next}`);
+    }
+    this.saveTimer -= dt;
+    if (this.saveTimer <= 0) {
+      this.saveTimer = 8;
+      if (!this.params.has('autopilot') && !this.params.has('fresh') && !this._noSave) writeSave(this);
+    }
     if (input.hit('KeyH')) this.hud.toggleHelp();
     if (input.hit('KeyM')) this.audio.toggleMute();
     if (input.hit('Tab')) this.hud.toggleJournal();
@@ -163,7 +247,7 @@ export class Game {
     for (const p of u.planets) p.updateRotation(u.time);
 
     const tPre = performance.now();
-    const controls = input.locked || this.params.has('autopilot') || (input.touchMode && input.touchStarted);
+    const controls = input.locked || this.params.has('autopilot') || (input.touchMode && input.touchStarted) || input.padActive;
     if (this.touch) this.touch.update();
     const T = input.touchMode;
     if (this.mode === 'foot') {
@@ -191,6 +275,7 @@ export class Game {
     u.update(dt, this.origin, this.camWorld, this.pipeline.pixelRatio);
     this._updateDynEnv();
     this._placeRender();
+    this._updateLamp(dt);
 
     const cam = this.pipeline.camera;
     cam.position.set(0, 0, 0);
@@ -363,10 +448,11 @@ export class Game {
       if (!sc.init) { sc.lag.copy(shipQuat); sc.init = true; }
       sc.lag.slerp(shipQuat, 1 - Math.exp(-dt * (this.ship.landed ? 3 : 5.5)));
       // free-look orbit while holding the right mouse button
-      const free = (this.input.buttons & 4) !== 0 || this.input.down('AltLeft') || this.input.touchLooking;
+      const free = (this.input.buttons & 4) !== 0 || this.input.down('AltLeft') || this.input.touchLooking || this.input.padLooking;
       if (free) {
-        sc.look.x -= this.input.mouseDX * 0.004;
-        sc.look.y = THREE.MathUtils.clamp(sc.look.y - this.input.mouseDY * 0.004, -1.2, 1.2);
+        const ls = 0.004 * settings.sensitivity;
+        sc.look.x -= this.input.mouseDX * ls;
+        sc.look.y = THREE.MathUtils.clamp(sc.look.y - this.input.mouseDY * ls * (settings.invertLook ? -1 : 1), -1.2, 1.2);
         this.ship.stick.set(0, 0);
       } else {
         sc.look.multiplyScalar(Math.exp(-dt * 3));
@@ -377,6 +463,25 @@ export class Game {
       const lookQ = sc.lag.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(sc.look.y - 0.12, sc.look.x, 0, 'YXZ')));
       const off = new THREE.Vector3(0, 3.6 + (sc.far ? 3 : 0), dist).applyQuaternion(lookQ);
       pos.copy(shipPos).add(off);
+      // pull the chase camera in where terrain blocks the boom
+      if (sb.frame) {
+        const f = sb.frame;
+        const shipLocal = f.worldToLocal(shipPos, new THREE.Vector3());
+        const camLocal = f.worldToLocal(pos, new THREE.Vector3());
+        const boom = camLocal.clone().sub(shipLocal);
+        const len = boom.length();
+        let allowed = len;
+        for (let i = 2; i <= 8; i++) {
+          const p = shipLocal.clone().addScaledVector(boom, i / 8);
+          if (p.length() < f.surfaceRadius(p.clone().normalize()) + 1.2) { allowed = Math.max(6, (len * (i - 1)) / 8); break; }
+        }
+        if (sc.block === undefined || allowed < sc.block) sc.block = allowed;
+        else sc.block += (allowed - sc.block) * Math.min(1, dt * 1.5);
+        if (sc.block < len) {
+          camLocal.copy(shipLocal).addScaledVector(boom, sc.block / len);
+          f.localToWorld(camLocal, pos);
+        }
+      }
       const target = new THREE.Vector3(0, 1.4, -10).applyQuaternion(lookQ).add(shipPos);
       const upv = new THREE.Vector3(0, 1, 0).applyQuaternion(lookQ);
       _m.lookAt(pos, target, upv);
@@ -427,8 +532,51 @@ export class Game {
     this._ray.far = len + 0.3;
     const hit = this._ray.intersectObject(this._hullProxy, false)[0];
     if (hit) {
-      const d = Math.max(0.6, hit.distance - 0.35);
+      const d = Math.max(1.1, hit.distance - 0.35);
       camPos.copy(pivot).addScaledVector(camPos.clone().sub(pivot).normalize(), d);
+    }
+  }
+
+  // Helmet lamp on foot, headlights when piloting. Auto mode switches on after dark.
+  _updateLamp(dt) {
+    const u = this.universe;
+    const foot = this.mode === 'foot';
+    const body = foot ? this.player.body : this.ship.body;
+    const planet = body.frame;
+    const world = u.toWorld(body, _v);
+    let dark = 0;
+    if (planet) {
+      const up = body.pos.clone().normalize().applyQuaternion(planet.quat);
+      const e = up.dot(u.sunWorld.clone().sub(world).normalize());
+      dark = 1 - THREE.MathUtils.smoothstep(e, -0.04, 0.12);
+    }
+    const want = settings.lamp === 'on' ? 1 : settings.lamp === 'off' ? 0 : dark;
+    this.lampLevel += (want - this.lampLevel) * (1 - Math.exp(-dt * 4));
+    const lvl = this.lampLevel;
+    const L = LAMP;
+    this.astronaut.lampMesh.visible = foot && lvl > 0.05;
+    if (lvl < 0.01) { L.uLampColor.value.set(0, 0, 0); return; }
+    const q = new THREE.Quaternion();
+    if (foot) {
+      const pl = planet;
+      const up = body.pos.clone().normalize();
+      const head = body.pos.clone().addScaledVector(up, 1.7);
+      pl.localToWorld(head, L.uLampPos.value).sub(this.origin);
+      const camFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camQuat);
+      const upW = up.applyQuaternion(pl.quat);
+      L.uLampDir.value.copy(camFwd).addScaledVector(upW, -0.12).normalize();
+      L.uLampColor.value.set(2.6, 2.45, 2.1).multiplyScalar(lvl);
+      L.uLampRange.value = 36;
+      L.uLampCos.value = 0.87;
+    } else {
+      u.toWorld(body, _w, q);
+      const nose = new THREE.Vector3(0, -0.3, -6.2).applyQuaternion(q).add(_w);
+      L.uLampPos.value.copy(nose).sub(this.origin);
+      const fwd = new THREE.Vector3(0, -0.22, -1).normalize().applyQuaternion(q);
+      L.uLampDir.value.copy(fwd);
+      L.uLampColor.value.set(5.2, 4.9, 4.3).multiplyScalar(lvl);
+      L.uLampRange.value = this.ship.landed ? 70 : 150;
+      L.uLampCos.value = 0.91;
     }
   }
 

@@ -2,11 +2,21 @@
 // per-fragment sun direction (so distant planets light correctly), sun shadows,
 // sky ambient and per-vertex atmospheric scattering for aerial perspective.
 import * as THREE from 'three';
-import { ATMO_PARS, CEL_FUNCS, SHADOW_FRAG, NOISE_GLSL } from './shaders.js';
+import { ATMO_PARS, CEL_FUNCS, SHADOW_FRAG, NOISE_GLSL, LAMP_PARS } from './shaders.js';
 import { Q } from '../core/quality.js';
+
+// Shared by every environment so one lamp lights all planets' materials.
+export const LAMP = {
+  uLampPos: { value: new THREE.Vector3() },
+  uLampDir: { value: new THREE.Vector3(0, 0, -1) },
+  uLampColor: { value: new THREE.Vector3() },
+  uLampRange: { value: 40 },
+  uLampCos: { value: 0.88 },
+};
 
 export function createEnv() {
   return {
+    ...LAMP,
     uSunPos: { value: new THREE.Vector3() },
     uSunColor: { value: new THREE.Vector3(1, 1, 1) },
     uPlanetCenter: { value: new THREE.Vector3(1e9, 0, 0) },
@@ -108,6 +118,7 @@ const CEL_FRAG = /* glsl */ `
 ${ATMO_PARS}
 ${CEL_FUNCS}
 ${SHADOW_FRAG}
+${LAMP_PARS}
 uniform vec3 uColor;
 uniform vec3 uEmissive;
 uniform float uEmitScale;
@@ -156,6 +167,7 @@ void main() {
     float sp = pow(max(dot(N, H), 0.0), 80.0);
     col += vSunCol * smoothstep(0.45, 0.55, sp) * uGloss * sh;
   }
+  col += albedo * lampAt(vWorldPos, N);
   col += mix(vColor.rgb, uEmissive, uEmitUniform) * vColor.a * uEmitScale;
   col = col * vTransmit + vInscatter;
   gl_FragColor = vec4(col, 1.0);
@@ -321,6 +333,7 @@ const WATER_FRAG = /* glsl */ `
 ${ATMO_PARS}
 ${CEL_FUNCS}
 ${SHADOW_FRAG}
+${LAMP_PARS}
 ${NOISE_GLSL}
 uniform vec3 uShallow;
 uniform vec3 uDeep;
@@ -407,6 +420,7 @@ void main() {
     float edge = smoothstep(2.0, 0.0, vDepth);
     col += uFoam * edge * 2.0;
   }
+  col += lampAt(vWorldPos, vUp) * 0.3;
   col = col * vTransmit + vInscatter;
   gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
 }

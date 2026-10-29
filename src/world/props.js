@@ -254,7 +254,11 @@ const B = {
       const h = 2 + rand() * 3;
       const x = (rand() - 0.5) * 1.2, z = (rand() - 0.5) * 1.2;
       P.push(part(tube([[x, -0.3, z], [x * 1.2, h * 0.5, z], [x * 1.5 + 0.2, h, z * 1.4]], 0.14, 0.07, 5), 0x3b2a26, { flat: true }));
-      P.push(part(G.sphere(0.28, 7, 5), 0xff7a22, { matrix: mat([x * 1.5 + 0.2, h + 0.15, z * 1.4], [0, 0, 0], [1, 1.4, 1]), emissive: 2.2 }));
+      // a narrow flame-shaped glowing bud with a hotter core
+      const tip = [x * 1.5 + 0.2, h, z * 1.4];
+      P.push(part(G.cone(0.13, 0.5, 6), 0xff5a14, { matrix: mat([tip[0], tip[1] + 0.25, tip[2]]), emissive: 1.1, flat: true }));
+      P.push(part(G.ico(0.08, 0), 0xffd27a, { matrix: mat([tip[0], tip[1] + 0.12, tip[2]]), emissive: 1.8, flat: true }));
+      P.push(part(G.cyl(0.09, 0.07, 0.1, 6), 0x2a1c18, { matrix: mat([tip[0], tip[1] - 0.02, tip[2]]), flat: true }));
     }
     return { geo: mergeParts(P), collider: { r: 0.5, h: 3 }, wind: 0.01 };
   },

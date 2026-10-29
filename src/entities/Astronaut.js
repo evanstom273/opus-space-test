@@ -86,6 +86,14 @@ export class Astronaut {
     visor.scale.set(1.02, 1.0, 1.06);
     this.bones.head.add(visor);
 
+    // helmet lamp lens (glows when the lamp is on)
+    const lensGeo = new THREE.CylinderGeometry(0.028, 0.034, 0.03, 12);
+    lensGeo.rotateX(Math.PI / 2);
+    this.lampMesh = new THREE.Mesh(lensGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(4.0, 3.7, 3.1) }));
+    this.lampMesh.position.set(0.165, 0.13, -0.035);
+    this.lampMesh.visible = false;
+    this.bones.head.add(this.lampMesh);
+
     // jetpack flames
     this.flameMat = createFlameMaterial(0x7fd8ff);
     const flameGeo = new THREE.ConeGeometry(0.05, 1, 10, 1, true);

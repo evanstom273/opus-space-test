@@ -181,3 +181,23 @@ float snoise(vec3 v) {
   return 105.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 `;
+
+// A single shared spotlight: the explorer's helmet lamp or the ship's headlights.
+export const LAMP_PARS = /* glsl */ `
+uniform vec3 uLampPos;
+uniform vec3 uLampDir;
+uniform vec3 uLampColor;
+uniform float uLampRange;
+uniform float uLampCos;
+vec3 lampAt(vec3 p, vec3 n) {
+  if (uLampColor.r + uLampColor.g + uLampColor.b < 1e-4) return vec3(0.0);
+  vec3 d = uLampPos - p;
+  float dist = length(d);
+  if (dist > uLampRange) return vec3(0.0);
+  vec3 L = d / max(dist, 1e-3);
+  float cone = smoothstep(uLampCos, mix(uLampCos, 1.0, 0.4), dot(-L, uLampDir));
+  float fall = 1.0 - smoothstep(uLampRange * 0.3, uLampRange, dist);
+  float ndl = smoothstep(-0.02, 0.2, dot(n, L));
+  return uLampColor * cone * fall * (0.3 + 0.7 * ndl);
+}
+`;

@@ -3,11 +3,14 @@
 // slope sliding and simple cylinder collisions with props, creatures and the ship.
 import * as THREE from 'three';
 import { sampleSurface } from '../world/terrainGen.js';
+import { settings } from '../game/Settings.js';
 
 const _up = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _e = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _s = { h: 0, nx: 0, ny: 0, nz: 0, slope: 0 };
 
@@ -66,6 +69,7 @@ export class Player {
   }
 
   update(dt, input, controls = true) {
+    this.lastDt = dt;
     const planet = this.body.frame;
     const pos = this.body.pos, vel = this.body.vel;
     const up = _up.copy(pos).normalize();
@@ -75,10 +79,10 @@ export class Player {
 
     // camera look
     if (controls) {
-      const sens = 0.0024;
+      const sens = 0.0024 * settings.sensitivity;
       this.camFwd.applyAxisAngle(up, -input.mouseDX * sens);
       projectTangent(this.camFwd, up);
-      this.camPitch = THREE.MathUtils.clamp(this.camPitch - input.mouseDY * sens, -1.25, 1.0);
+      this.camPitch = THREE.MathUtils.clamp(this.camPitch - input.mouseDY * sens * (settings.invertLook ? -1 : 1), -1.25, 1.0);
       if (input.wheel) this.camDistTarget = THREE.MathUtils.clamp(this.camDistTarget + input.wheel * 0.8, 2.2, 14);
     }
     this.camDist += (this.camDistTarget - this.camDist) * Math.min(1, dt * 8);
@@ -255,7 +259,18 @@ export class Player {
     const right = _a.crossVectors(this.camFwd, up).normalize();
     const f = _b.copy(this.camFwd).applyAxisAngle(right, this.camPitch);
     const pivot = _c.copy(pos).addScaledVector(up, 1.55).addScaledVector(right, 0.32);
-    outPos.copy(pivot).addScaledVector(f, -this.camDist);
+    // Sample along the camera boom and pull the camera in where terrain
+    // (or water) would block the view; pull in fast, ease back out slowly.
+    let allowed = this.camDist;
+    for (let i = 1; i <= 8; i++) {
+      const t = (i / 8) * this.camDist;
+      const p = _d.copy(pivot).addScaledVector(f, -t);
+      const g = planet.surfaceRadius(_e.copy(p).normalize()) + 0.35;
+      if (p.length() < g) { allowed = Math.max(0.9, t - this.camDist / 8 - 0.2); break; }
+    }
+    if (this.camBlock === undefined || allowed < this.camBlock) this.camBlock = allowed;
+    else this.camBlock += (allowed - this.camBlock) * Math.min(1, (this.lastDt || 0.016) * 2.5);
+    outPos.copy(pivot).addScaledVector(f, -Math.min(this.camDist, this.camBlock));
     this.camPivot = (this.camPivot || new THREE.Vector3()).copy(pivot);
     // keep the camera above ground / water
     const cd = outPos.clone().normalize();

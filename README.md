@@ -24,10 +24,22 @@ Click the page to capture the mouse. A desktop browser with WebGL2 is required.
 | Wheel | Camera distance | Right mouse | Look around |
 | | | F | Exit ship (when landed) |
 
-General: `Tab` discovery journal, `T` fast-forward time of day, `H` help, `M` mute, `Esc` release mouse.
+General: `Tab` discovery journal, `L` lamp (auto/on/off), `T` fast-forward time of day, `O` settings, `H` help, `M` mute, `Esc` release mouse.
+
+**Gamepad** (standard layout):
+- **Sticks:** left stick moves or steers; right stick looks around.
+- **On foot:** A jumps (hold for jetpack), B sprints, X boards the ship.
+- **Piloting:** RT/LT thrust and brake, A/B ascend and descend, LB/RB roll, Y boosts, X exits once landed.
+- **Menus:** Start opens the journal.
 
 To land, slow down near the ground. The gear deploys automatically, then hold `C` to settle onto the surface.
 In space, hold `Shift` with `W` for the cruise drive. It slows automatically as you approach a planet.
+
+## Settings, saving and night
+
+- **Settings (`O`, or the button on the pause screen):** look sensitivity, invert-Y for walking and for flight, graphics quality (auto/high/low), a frame-rate counter, lamp mode, volume, and a New game reset.
+- **Saving:** your position, ship and time of day are saved automatically in this browser and resumed on your next visit. Discoveries are kept too.
+- **Night:** a helmet lamp (on foot) and ship headlights (when piloting) switch on automatically after dark.
 
 ## The worlds
 
