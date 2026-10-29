@@ -14,7 +14,7 @@ self.onmessage = (e) => {
     self.postMessage({ id: job.id, result: r }, transfer);
   } else if (job.kind === 'scatter') {
     const r = buildScatter(gen, job.tier, job.face, job.level, job.x0, job.y0, job.size, job.spawns, job.density);
-    const transfer = Object.values(r.types).map((a) => a.buffer);
+    const transfer = [...Object.values(r.types), ...Object.values(r.mats), ...Object.values(r.cols)].map((a) => a.buffer);
     self.postMessage({ id: job.id, result: r }, transfer);
   }
 };

@@ -80,8 +80,18 @@ export class Hud {
     this._buildHelp(this.start.querySelector('.start-controls'), true);
     this.errorEl = el('div', 'hud-error hidden', root);
     this.start.querySelector('[data-act="settings"]').addEventListener('click', (e) => { e.stopPropagation(); this.openSettings(); });
-    this.fpsEl = el('div', 'hud-fps hidden', root);
-    this._fpsT = 0;
+    // performance overlay: frame-time graph + summary
+    this.perf = el('div', 'hud-perf hidden', root, '<canvas width="240" height="64"></canvas><div class="perf-text"></div>');
+    this.perfCanvas = this.perf.querySelector('canvas');
+    this.perfCtx = this.perfCanvas.getContext('2d');
+    this.perfText = this.perf.querySelector('.perf-text');
+    this.frameMs = new Float32Array(240);
+    this.workMs = new Float32Array(240);
+    this.frameIdx = 0;
+    this.hitchTimes = [];
+    this._perfT = 0;
+    this.startLoaded = false;
+    this.start.classList.add('loading');
     this._buildSettings();
     if (game.params.has('autopilot')) this.start.classList.add('hidden');
     this.promptText = '';
@@ -105,14 +115,78 @@ export class Hud {
   setTouch(on) {
     this.touch = on;
     this.root.classList.add('is-touch');
-    this.startClick.textContent = 'Tap to begin · landscape recommended';
+    if (this.startLoaded) this.startClick.textContent = 'Tap to begin · landscape recommended';
+  }
+
+  // Loading screen progress (0..1) with the current step.
+  setLoading(frac, label) {
+    this.startLoad.style.width = `${Math.round(Math.min(1, Math.max(0.03, frac)) * 100)}%`;
+    this._txt(this.startClick, `${label}…`);
+  }
+
+  setReady() {
+    this.startLoaded = true;
+    this.start.classList.remove('loading');
+    this.startLoad.style.width = '100%';
+    this.startClick._v = undefined;
+    this.startClick.textContent = this.touch ? 'Tap to begin · landscape recommended' : 'Click to begin';
+  }
+
+  // Called once per frame with the real frame interval and the JS work time.
+  recordFrame(intervalMs, workMs) {
+    const i = this.frameIdx = (this.frameIdx + 1) % this.frameMs.length;
+    this.frameMs[i] = intervalMs;
+    this.workMs[i] = workMs;
+    const now = performance.now();
+    if (intervalMs > 34 && this.game.ready) this.hitchTimes.push(now);
+    while (this.hitchTimes.length && now - this.hitchTimes[0] > 10000) this.hitchTimes.shift();
+    if (!settings.showFps) return;
+    this._drawPerf();
+  }
+
+  _drawPerf() {
+    const ctx = this.perfCtx, W = this.perfCanvas.width, H = this.perfCanvas.height;
+    const n = this.frameMs.length, maxMs = 66.7;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, 0, W, H);
+    const y = (ms) => H - Math.min(ms, maxMs) / maxMs * H;
+    for (let k = 0; k < n; k++) {
+      const idx = (this.frameIdx + 1 + k) % n;
+      const ms = this.frameMs[idx];
+      if (!ms) continue;
+      ctx.fillStyle = ms <= 18 ? '#6fe08a' : ms <= 34 ? '#ffd25a' : '#ff6a5a';
+      ctx.fillRect(k, y(ms), 1, H - y(ms));
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillRect(k, y(this.workMs[idx]), 1, H - y(this.workMs[idx]));
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.setLineDash([3, 3]);
+    for (const ms of [16.7, 33.3]) { ctx.beginPath(); ctx.moveTo(0, y(ms) + 0.5); ctx.lineTo(W, y(ms) + 0.5); ctx.stroke(); }
+    ctx.setLineDash([]);
+  }
+
+  _updatePerfText() {
+    const n = this.frameMs.length;
+    let sum = 0, work = 0, worst = 0, c = 0;
+    // last ~2 s of frames
+    for (let k = 0; k < Math.min(n, 120); k++) {
+      const idx = (this.frameIdx - k + n) % n;
+      const ms = this.frameMs[idx];
+      if (!ms) continue;
+      sum += ms; work += this.workMs[idx]; c++;
+      if (ms > worst) worst = ms;
+    }
+    if (!c) return;
+    const avg = sum / c;
+    this._txt(this.perfText, `${Math.round(1000 / avg)} fps · ${avg.toFixed(1)} ms avg · worst ${worst.toFixed(0)} ms\n${this.hitchTimes.length} hitches (>34 ms) in 10 s · CPU ${(work / c).toFixed(1)} ms · ${Q.name} ${this.game.pipeline.pixelRatio.toFixed(2)}×`);
   }
 
   setLocked(locked) {
     this.locked = locked;
     this.start.classList.toggle('hidden', locked);
     if (locked) this.start.classList.add('played');
-    if (this.touch) return;
+    if (this.touch || !this.startLoaded) return;
     this.startClick.textContent = this.start.classList.contains('played') ? 'Paused · click to resume' : 'Click to begin';
   }
 
@@ -129,7 +203,7 @@ export class Hud {
         <label for="set-invf">Invert flight pitch</label><input id="set-invf" type="checkbox" data-key="invertFlight">
         <label for="set-q">Graphics quality</label>
         <select id="set-q" data-key="quality"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low (phones)</option></select>
-        <label for="set-fps">Show frame rate</label><input id="set-fps" type="checkbox" data-key="showFps">
+        <label for="set-fps">Show performance graph</label><input id="set-fps" type="checkbox" data-key="showFps">
         <label for="set-lamp">Lamp</label>
         <select id="set-lamp" data-key="lamp"><option value="auto">Auto (after dark)</option><option value="on">Always on</option><option value="off">Off</option></select>
         <label for="set-vol">Volume <span class="set-val" data-val="volume"></span></label>
@@ -237,16 +311,12 @@ export class Hud {
     this._textT = (this._textT || 0) - dt;
     const doText = this._textT <= 0;
     if (doText) this._textT = 0.12;
-    // loading progress on the start screen
-    const pending = u.service.pending;
-    if (doText) this.startLoad.style.width = `${Math.max(5, 100 - Math.min(100, pending))}%`;
-
-    // frame-rate readout
-    this._fpsT -= dt;
-    if (this._fpsT <= 0) {
-      this._fpsT = 0.5;
-      this.fpsEl.classList.toggle('hidden', !settings.showFps);
-      if (settings.showFps) this._txt(this.fpsEl, `${Math.round(g.fps)} fps · ${Q.name} · ${g.pipeline.pixelRatio.toFixed(2)}× res`);
+    // performance overlay summary
+    this._perfT -= dt;
+    if (this._perfT <= 0) {
+      this._perfT = 0.25;
+      this.perf.classList.toggle('hidden', !settings.showFps);
+      if (settings.showFps) this._updatePerfText();
     }
 
     const shipMode = g.mode === 'ship';

@@ -20,6 +20,43 @@ const OUTLINE_R = Q.outlineRadius;
 const SHADOW_R = 95;
 const _hidden = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 
+// First-fit slot allocator so cells can be added/removed in place and only
+// their own instance ranges are re-uploaded to the GPU.
+class Slots {
+  constructor() { this.free = []; this.top = 0; this.live = 0; }
+  alloc(n) {
+    this.live += n;
+    for (let i = 0; i < this.free.length; i++) {
+      const f = this.free[i];
+      if (f[1] >= n) {
+        const s = f[0];
+        f[0] += n; f[1] -= n;
+        if (f[1] === 0) this.free.splice(i, 1);
+        return s;
+      }
+    }
+    const s = this.top;
+    this.top += n;
+    return s;
+  }
+  release(s, n) {
+    this.live -= n;
+    this.free.push([s, n]);
+    this.free.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const f of this.free) {
+      const last = merged[merged.length - 1];
+      if (last && last[0] + last[1] === f[0]) last[1] += f[1];
+      else merged.push([f[0], f[1]]);
+    }
+    // trailing free space lowers the high-water mark
+    const tail = merged[merged.length - 1];
+    if (tail && tail[0] + tail[1] === this.top) { this.top = tail[0]; merged.pop(); }
+    this.free = merged;
+  }
+  reset() { this.free = []; this.top = 0; this.live = 0; }
+}
+
 class Batch {
   constructor(planet, id, proto, mats) {
     this.planet = planet;
@@ -27,13 +64,14 @@ class Batch {
     this.proto = proto;
     this.mats = mats;
     this.cells = new Set();
-    this.dirty = false;
+    this.slots = new Slots();
+    this.nearDirty = false;
     this.mesh = null;
     this.outline = null;
     this.shadow = null;
     this.material = proto.gloss ? mats.gloss : proto.wind ? mats.windFor(proto.wind) : mats.solid;
     this.outlineMaterial = proto.noOutline ? null : proto.wind ? mats.outlineWindFor(proto.wind) : mats.outline;
-    this._alloc('mesh', 256);
+    this._alloc('mesh', 1024);
     if (this.outlineMaterial) this._alloc('outline', 256);
     if (!proto.noShadow) this._alloc('shadow', 128);
   }
@@ -56,22 +94,64 @@ class Batch {
     return m;
   }
 
-  rebuild() {
-    let total = 0;
-    for (const c of this.cells) total += c.count;
-    if (total > this.mesh.userData.capacity) this._alloc('mesh', Math.ceil(total * 1.5));
-    const mArr = this.mesh.instanceMatrix.array;
-    const cArr = this.mesh.instanceColor.array;
-    let o = 0;
+  _ensureCapacity(top) {
+    const cap = this.mesh.userData.capacity;
+    if (top <= cap) return;
+    const oldM = this.mesh.instanceMatrix.array, oldC = this.mesh.instanceColor.array;
+    const m = this._alloc('mesh', Math.ceil(Math.max(top, cap * 2)));
+    m.instanceMatrix.array.set(oldM.subarray(0, Math.min(oldM.length, m.instanceMatrix.array.length)));
+    m.instanceColor.array.set(oldC.subarray(0, Math.min(oldC.length, m.instanceColor.array.length)));
+    m.instanceMatrix.needsUpdate = true;
+    m.instanceColor.needsUpdate = true;
+  }
+
+  _write(cell) {
+    const m = this.mesh;
+    m.instanceMatrix.array.set(cell.matrices.subarray(0, cell.count * 16), cell.slot * 16);
+    m.instanceColor.array.set(cell.colors.subarray(0, cell.count * 3), cell.slot * 3);
+    m.instanceMatrix.addUpdateRange(cell.slot * 16, cell.count * 16);
+    m.instanceColor.addUpdateRange(cell.slot * 3, cell.count * 3);
+    m.instanceMatrix.needsUpdate = true;
+    m.instanceColor.needsUpdate = true;
+  }
+
+  addCell(cell) {
+    cell.slot = this.slots.alloc(cell.count);
+    this._ensureCapacity(this.slots.top);
+    this.cells.add(cell);
+    this._write(cell);
+    this.mesh.count = this.slots.top;
+    this.nearDirty = true;
+  }
+
+  removeCell(cell) {
+    if (!this.cells.delete(cell)) return;
+    const m = this.mesh;
+    // zero matrices collapse the instances to nothing until the slots are reused
+    m.instanceMatrix.array.fill(0, cell.slot * 16, (cell.slot + cell.count) * 16);
+    m.instanceMatrix.addUpdateRange(cell.slot * 16, cell.count * 16);
+    m.instanceMatrix.needsUpdate = true;
+    this.slots.release(cell.slot, cell.count);
+    m.count = this.slots.top;
+    this.nearDirty = true;
+    // heavy fragmentation: compact everything once
+    if (this.slots.top > 512 && this.slots.top > this.slots.live * 2) this._compact();
+  }
+
+  _compact() {
+    this.slots.reset();
+    const m = this.mesh;
+    m.instanceMatrix.array.fill(0);
+    m.instanceMatrix.clearUpdateRanges();
+    m.instanceColor.clearUpdateRanges();
     for (const c of this.cells) {
-      mArr.set(c.matrices.subarray(0, c.count * 16), o * 16);
-      cArr.set(c.colors.subarray(0, c.count * 3), o * 3);
-      o += c.count;
+      c.slot = this.slots.alloc(c.count);
+      m.instanceMatrix.array.set(c.matrices.subarray(0, c.count * 16), c.slot * 16);
+      m.instanceColor.array.set(c.colors.subarray(0, c.count * 3), c.slot * 3);
     }
-    this.mesh.count = o;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.instanceColor.needsUpdate = true;
-    this.dirty = false;
+    m.instanceMatrix.needsUpdate = true;
+    m.instanceColor.needsUpdate = true;
+    m.count = this.slots.top;
   }
 
   // Near subsets for outlines and shadow casting, refreshed as the focus moves.
@@ -143,31 +223,19 @@ export class Flora {
       if (!batch) continue;
       const n = data.length / 9;
       if (!n) continue;
-      const matrices = new Float32Array(n * 16);
-      const colors = new Float32Array(n * 3);
+      // matrices and tints were computed in the worker
+      const matrices = res.mats[id];
+      const colors = res.cols[id];
       const col = [];
       const info = batch.proto.collider;
-      const rand = mulberry32(Math.floor(data[0] * 13 + data[2] * 7) | 0);
-      for (let i = 0; i < n; i++) {
-        const k = i * 9;
-        _p.set(data[k], data[k + 1], data[k + 2]);
-        _up.set(data[k + 3], data[k + 4], data[k + 5]);
-        const sc = data[k + 6], yaw = data[k + 7];
-        _q.setFromUnitVectors(Y, _up);
-        const qy = new THREE.Quaternion().setFromAxisAngle(Y, yaw);
-        _q.multiply(qy);
-        _s.set(sc, sc * (0.9 + data[k + 8] * 0.25), sc);
-        _m.compose(_p, _q, _s);
-        _m.toArray(matrices, i * 16);
-        const v = 0.86 + rand() * 0.28;
-        const hue = (rand() - 0.5) * 0.08;
-        _c.setRGB(v * (1 + hue), v, v * (1 - hue));
-        colors[i * 3] = _c.r; colors[i * 3 + 1] = _c.g; colors[i * 3 + 2] = _c.b;
-        if (info) col.push({ x: _p.x, y: _p.y, z: _p.z, r: info.r * sc, h: info.h * sc, top: info.top });
+      if (info) {
+        for (let i = 0; i < n; i++) {
+          const k = i * 9, sc = data[k + 6];
+          col.push({ x: data[k], y: data[k + 1], z: data[k + 2], r: info.r * sc, h: info.h * sc, top: info.top });
+        }
       }
-      const cell = { count: n, matrices, colors, colliders: col, id, positions: data, center: node.center.clone(), radius: node.radius };
-      batch.cells.add(cell);
-      batch.dirty = true;
+      const cell = { count: n, matrices, colors, colliders: col, id, positions: data, center: node.center.clone(), radius: node.radius, slot: 0 };
+      batch.addCell(cell);
       cellRecords.push([batch, cell]);
     }
     state.cells.set(node, { records: cellRecords, center: node.center.clone(), radius: node.radius });
@@ -177,10 +245,7 @@ export class Flora {
   _removeCell(state, node) {
     const c = state.cells.get(node);
     if (!c) return;
-    for (const [batch, cell] of c.records) {
-      batch.cells.delete(cell);
-      batch.dirty = true;
-    }
+    for (const [batch, cell] of c.records) batch.removeCell(cell);
     state.cells.delete(node);
     if (this.onSpawnsRemove) this.onSpawnsRemove(state.planet, node);
   }
@@ -189,7 +254,7 @@ export class Flora {
     this.nearTimer = (this.nearTimer || 0) - dt;
     for (const state of this.planets.values()) {
       let changed = false;
-      for (const b of state.batches.values()) if (b.dirty) { b.rebuild(); changed = true; }
+      for (const b of state.batches.values()) if (b.nearDirty) { changed = true; b.nearDirty = false; }
       if (state.planet !== focusPlanet) continue;
       const focus = state.planet.worldToLocal(camWorld, _p);
       const moved = !state.lastFocus || state.lastFocus.distanceTo(focus) > 6;

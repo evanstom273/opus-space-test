@@ -29,6 +29,7 @@ export class Fauna {
     this.creatures = [];
     this.max = Q.fauna;
     this.calls = [];
+    this.warm = [];
     this.playerLocal = new THREE.Vector3();
     for (const p of universe.planets) {
       this.mats.set(p, {
@@ -53,6 +54,34 @@ export class Fauna {
     return this.protos.get(key);
   }
 
+  // Build every species' prototype up front so first spawns don't hitch.
+  prebuild() {
+    for (const planet of this.universe.planets) for (const sp of planet.gen.spawns) this._proto(planet, sp.id);
+  }
+
+  // One instance of every species beside the player so their shaders,
+  // including shadow-pass variants, compile behind the loading screen.
+  addWarmupActors(planet, center, fwd) {
+    this.removeWarmupActors();
+    const up = center.clone().normalize();
+    const side = new THREE.Vector3().crossVectors(fwd, up).normalize();
+    let i = 0;
+    for (const [key, proto] of this.protos) {
+      const owner = this.universe.planets.find((p) => key.startsWith(p.def.id + ':'));
+      const m = this.mats.get(owner);
+      const inst = instantiate(proto, proto.doubleSide ? m.celDouble : m.cel, proto.doubleSide ? null : m.outline);
+      inst.mesh.position.copy(center).addScaledVector(fwd, 6 + (i % 4) * 3).addScaledVector(side, (Math.floor(i / 4) - 1.5) * 3);
+      planet.root.add(inst.mesh);
+      this.warm.push(inst.mesh);
+      i++;
+    }
+  }
+
+  removeWarmupActors() {
+    for (const m of this.warm) { m.parent?.remove(m); m.skeleton.dispose(); }
+    this.warm.length = 0;
+  }
+
   _addHerds(planet, node, spawns) {
     const list = spawns.map((s) => {
       const dir = new THREE.Vector3(...s.dir);
@@ -69,14 +98,18 @@ export class Fauna {
     this.herds.get(planet).delete(node);
   }
 
-  _spawn(herd) {
+  // Spawn up to `limit` more members of a herd (herds fill in over a few frames).
+  _spawn(herd, limit = 2) {
     const planet = herd.planet;
     const proto = this._proto(planet, herd.id);
     const m = this.mats.get(planet);
-    const rand = mulberry32(herd.seed);
+    if (!herd.rand) herd.rand = mulberry32(herd.seed);
+    const rand = herd.rand;
     const sp = proto.sp;
-    for (let i = 0; i < herd.count; i++) {
+    let made = 0;
+    while (herd.creatures.length < herd.count && made < limit) {
       if (this.creatures.length >= this.max) break;
+      made++;
       const inst = instantiate(proto, proto.doubleSide ? m.celDouble : m.cel, proto.doubleSide ? null : m.outline);
       const up = herd.dir.clone();
       const t1 = tangent(new THREE.Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5), up);
@@ -110,6 +143,7 @@ export class Fauna {
     }
     herd.creatures.length = 0;
     herd.spawned = false;
+    herd.rand = null;
   }
 
   update(dt, game, focusPlanet) {
@@ -117,13 +151,15 @@ export class Fauna {
     const camWorld = game.camWorld;
     // player position in the focus planet frame (for flee/curiosity)
     const pb = game.mode === 'foot' ? game.player.body : game.ship.body;
+    let spawnedThisFrame = false; // spread herd spawns across frames
     for (const [planet, nodes] of this.herds) {
       const near = planet === focusPlanet;
       const camLocal = planet.worldToLocal(camWorld, _cam);
       for (const list of nodes.values()) {
         for (const h of list) {
           const d = h.center.distanceTo(camLocal);
-          if (near && !h.spawned && d < 430 && this.creatures.length < this.max) this._spawn(h);
+          const wants = !h.spawned || h.creatures.length < h.count;
+          if (near && wants && !spawnedThisFrame && d < 430 && this.creatures.length < this.max) { this._spawn(h, 2); spawnedThisFrame = true; }
           else if (h.spawned && (!near || d > 620)) this._despawn(h);
         }
       }

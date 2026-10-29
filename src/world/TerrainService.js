@@ -10,6 +10,8 @@ export class TerrainService {
     this.inflight = new Map();
     this.nextId = 1;
     this.workers = [];
+    this.results = [];
+    this.budgetMs = 2.5;
     this.fallback = false;
     const count = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
     try {
@@ -40,10 +42,21 @@ export class TerrainService {
   }
 
   get pending() {
-    return this.queue.length + this.inflight.size;
+    return this.queue.length + this.inflight.size + this.results.length;
   }
 
   update() {
+    // Apply finished jobs within a time budget so bursts of results (fast
+    // flight, arriving at a planet) are spread over frames instead of hitching.
+    if (this.results.length) {
+      const t0 = performance.now();
+      let n = 0;
+      while (this.results.length && (n === 0 || performance.now() - t0 < this.budgetMs)) {
+        const [e, result] = this.results.shift();
+        if (!e.cancelled) e.callback(result);
+        n++;
+      }
+    }
     if (this.queue.length === 0) return;
     // drop cancelled, sort by priority
     this.queue = this.queue.filter((e) => !e.cancelled);
@@ -82,7 +95,7 @@ export class TerrainService {
     worker.jobs--;
     const e = this.inflight.get(msg.id);
     this.inflight.delete(msg.id);
-    if (e && !e.cancelled) e.callback(msg.result);
+    if (e && !e.cancelled) this.results.push([e, msg.result]);
     this._pump(worker);
   }
 

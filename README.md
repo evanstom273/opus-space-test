@@ -37,7 +37,9 @@ In space, hold `Shift` with `W` for the cruise drive. It slows automatically as 
 
 ## Settings, saving and night
 
-- **Settings (`O`, or the button on the pause screen):** look sensitivity, invert-Y for walking and for flight, graphics quality (auto/high/low), a frame-rate counter, lamp mode, volume, and a New game reset.
+- **Settings (`O`, or the button on the pause screen):** look sensitivity, invert-Y for walking and for flight, graphics quality (auto/high/low), a performance graph, lamp mode, volume, and a New game reset.
+- **Performance graph:** shows the real time of each of the last ~240 frames (green ≤18 ms, yellow ≤34 ms, red above), with the CPU share in white. Below it are average fps, the worst frame, and the number of hitches (>34 ms) in the last 10 s.
+- **Loading screen:** before play it generates the nearby terrain, builds every creature model and compiles every shader variant, including shadow variants, so nothing compiles mid-game.
 - **Saving:** your position, ship and time of day are saved automatically in this browser and resumed on your next visit. Discoveries are kept too.
 - **Night:** a helmet lamp (on foot) and ship headlights (when piloting) switch on automatically after dark.
 
